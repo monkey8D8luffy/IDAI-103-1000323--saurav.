@@ -4,25 +4,29 @@ import pandas as pd
 import numpy as np
 import os
 
-# Safely fetch the key from the hidden vault
-API_KEY = st.secrets.get("GEMINI_API_KEY")
-genai.configure(api_key=API_KEY)
-
 # ==========================================
 # 1. Page Configuration & Setup
 # ==========================================
+# This MUST be the first Streamlit command
 st.set_page_config(page_title="AuraFit AI", page_icon="⚡", layout="wide")
 
-# Ask the user for THEIR API key in the sidebar
-st.sidebar.markdown("<h3 style='color: white;'>🔑 Authentication</h3>", unsafe_allow_html=True)
-user_api_key = st.sidebar.text_input("Enter your Gemini API Key", type="password", help="Get your key from Google AI Studio")
+# Safely fetch the key from the hidden Streamlit Secrets vault
+API_KEY = st.secrets.get("GEMINI_API_KEY")
 
-if not user_api_key:
-    st.warning("⚠️ Please enter your Gemini API Key in the sidebar to activate the AI Coach.")
-    st.stop() # Stops the app from running further until a key is provided
+if not API_KEY:
+    st.error("⚠️ Gemini API Key missing. Please set 'GEMINI_API_KEY' in your Streamlit Cloud Secrets.")
+    st.stop()
 
-# Configure Gemini with the user's key
-genai.configure(api_key=user_api_key)
+genai.configure(api_key=API_KEY)
+
+# Initialize Session States
+if 'outdoor_mode' not in st.session_state:
+    st.session_state.outdoor_mode = False
+if 'ai_plan' not in st.session_state:
+    st.session_state.ai_plan = None
+if 'current_feature' not in st.session_state:
+    st.session_state.current_feature = None
+
 # ==========================================
 # 2. AI Logic & Prompt Engineering
 # ==========================================
@@ -164,7 +168,7 @@ with tab1:
     col1, col2, col3 = st.columns(3)
     with col1: glass_metric_card("Heart Rate", "68", "bpm", "glass-accent-magenta")
     with col2: glass_metric_card("Active Energy", "840", "kcal", "glass-accent-green")
-    with col3: glass_metric_card("Readiness", "92", "%", "glass-accent-cyan")
+    with col3: glass_metric_card("Readiness", "92", "10%", "glass-accent-cyan")
 
 with tab2:
     if st.session_state.ai_plan:

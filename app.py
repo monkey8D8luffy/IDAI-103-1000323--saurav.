@@ -1,193 +1,476 @@
+"""
+CoachBot AI - Personalized Sports Coaching powered by Gemini 1.5
+=================================================================
+A Streamlit web application that generates tailored coaching advice
+using the Google Generative AI (Gemini 1.5) API.
+
+Usage:
+    streamlit run app.py
+"""
+
 import streamlit as st
 import google.generativeai as genai
-import pandas as pd
-import numpy as np
-import os
 
-# ==========================================
-# 1. Page Configuration & Setup
-# ==========================================
-# This MUST be the first Streamlit command
-st.set_page_config(page_title="AuraFit AI", page_icon="⚡", layout="wide")
+# ──────────────────────────────────────────────────────────────────────────────
+# Page Configuration
+# ──────────────────────────────────────────────────────────────────────────────
+st.set_page_config(
+    page_title="CoachBot AI",
+    page_icon="🏆",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-# Safely fetch the key from the hidden Streamlit Secrets vault
-API_KEY = st.secrets.get("GEMINI_API_KEY")
+# ──────────────────────────────────────────────────────────────────────────────
+# Custom CSS for a clean, sport-inspired look
+# ──────────────────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500&display=swap');
 
-if not API_KEY:
-    st.error("⚠️ Gemini API Key missing. Please set 'GEMINI_API_KEY' in your Streamlit Cloud Secrets.")
-    st.stop()
-
-genai.configure(api_key=API_KEY)
-
-# Initialize Session States
-if 'outdoor_mode' not in st.session_state:
-    st.session_state.outdoor_mode = False
-if 'ai_plan' not in st.session_state:
-    st.session_state.ai_plan = None
-if 'current_feature' not in st.session_state:
-    st.session_state.current_feature = None
-
-# ==========================================
-# 2. AI Logic & Prompt Engineering
-# ==========================================
-FEATURES = {
-    "Full-body workout plan": "Create a detailed full-body workout plan tailored for the specific sport and position.",
-    "Safe recovery training schedule": "Design a safe, structured recovery training schedule that carefully adapts to the listed injuries and risk zones.",
-    "Tactical coaching tips": "Provide actionable tactical coaching tips to improve position-specific skills and game intelligence.",
-    "Week-long nutrition guide": "Create a comprehensive week-long nutrition guide adapting to the specific dietary needs, allergies, and calorie goals.",
-    "Personalized warm-up and cooldown routine": "Design a personalized, dynamic warm-up and static cooldown routine specific to the sport.",
-    "Mental focus and pre-match visualization routine": "Provide a mental focus and pre-match visualization routine to build confidence and game readiness.",
-    "Hydration and electrolyte strategy plan": "Outline a precise hydration and electrolyte strategy plan for pre, during, and post-activity.",
-    "Positional decision-making drills": "Suggest specific, situational decision-making drills tailored to the player's position.",
-    "Mobility workouts tailored for post-injury recovery": "Design gentle, effective mobility workouts strictly tailored for post-injury recovery and joint health.",
-    "Stamina-building routines for tournament preparation": "Provide progressive stamina-building cardiovascular and muscular endurance routines for tournament preparation."
+html, body, [class*="css"] {
+    font-family: 'Barlow', sans-serif;
+}
+h1, h2, h3 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.5px;
 }
 
-def get_temperature(feature_name):
-    safe_features = [
-        "Full-body workout plan", "Safe recovery training schedule", 
-        "Personalized warm-up and cooldown routine", "Mobility workouts tailored for post-injury recovery", 
-        "Stamina-building routines for tournament preparation"
-    ]
-    return 0.3 if feature_name in safe_features else 0.8
+/* Sidebar */
+[data-testid="stSidebar"] {
+    background: linear-gradient(160deg, #0f1923 0%, #1a2d3d 100%);
+    color: #e8edf2;
+}
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stTextInput label,
+[data-testid="stSidebar"] .stTextArea label,
+[data-testid="stSidebar"] .stNumberInput label,
+[data-testid="stSidebar"] p {
+    color: #c8d8e8 !important;
+    font-weight: 500;
+}
+[data-testid="stSidebar"] .stSelectbox > div > div,
+[data-testid="stSidebar"] .stTextInput > div > div > input,
+[data-testid="stSidebar"] .stTextArea > div > textarea,
+[data-testid="stSidebar"] .stNumberInput > div > div > input {
+    background-color: #1e3448 !important;
+    color: #e8edf2 !important;
+    border: 1px solid #2e4a60 !important;
+    border-radius: 6px;
+}
 
-# ==========================================
-# 3. CSS Injection: The "Glass OS" Engine
-# ==========================================
-def inject_custom_css(is_outdoor_mode):
-    if is_outdoor_mode:
-        card_bg = "rgba(20, 20, 20, 0.95)"
-        border = "2px solid #FFFFFF"
-        blur = "blur(0px)"
-        text_shadow = "none"
-    else:
-        card_bg = "rgba(255, 255, 255, 0.08)"
-        border = "1px solid rgba(255, 255, 255, 0.2)"
-        blur = "blur(16px)"
-        text_shadow = "0 2px 10px rgba(0,0,0,0.5)"
+/* Main header */
+.coachbot-header {
+    background: linear-gradient(90deg, #0f1923 0%, #1a4a6b 50%, #0f1923 100%);
+    border-left: 5px solid #00c6ff;
+    padding: 18px 24px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+}
+.coachbot-header h1 {
+    color: #ffffff;
+    margin: 0;
+    font-size: 2.4rem;
+}
+.coachbot-header p {
+    color: #8ab4cc;
+    margin: 4px 0 0 0;
+    font-size: 1.05rem;
+}
 
-    css = f"""
-    <style>
-        .stApp {{ background: radial-gradient(circle at top left, #1a2a6c, #111524, #111524); }}
-        .glass-card {{
-            background: {card_bg};
-            backdrop-filter: {blur};
-            -webkit-backdrop-filter: {blur};
-            border: {border};
-            border-radius: 24px;
-            padding: 24px;
-            margin-bottom: 20px;
-            color: white;
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-            text-shadow: {text_shadow};
-            transition: all 0.3s ease;
-        }}
-        .glass-title {{ font-size: 1.2rem; font-weight: 500; color: rgba(255, 255, 255, 0.7); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }}
-        .glass-metric {{ font-size: 3.5rem; font-weight: 800; line-height: 1; margin: 0; background: linear-gradient(135deg, #fff 0%, #aaa 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        .glass-accent-cyan {{ color: #00E5FF; text-shadow: 0 0 10px rgba(0, 229, 255, 0.4); }}
-        .glass-accent-green {{ color: #00FFAA; text-shadow: 0 0 10px rgba(0, 255, 170, 0.4); }}
-        .glass-accent-magenta {{ color: #FF00AA; text-shadow: 0 0 10px rgba(255, 0, 170, 0.4); }}
-    </style>
+/* Feature selector card */
+.feature-card {
+    background: #f0f6fb;
+    border: 1px solid #cfe3ef;
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+
+/* Generate button */
+div.stButton > button {
+    background: linear-gradient(90deg, #005f8a 0%, #007bb5 100%);
+    color: white;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 12px 30px;
+    border: none;
+    border-radius: 8px;
+    width: 100%;
+    transition: opacity 0.2s;
+}
+div.stButton > button:hover {
+    opacity: 0.88;
+}
+
+/* Response area */
+.response-box {
+    background: #f7fbff;
+    border-left: 5px solid #007bb5;
+    border-radius: 8px;
+    padding: 24px 28px;
+    margin-top: 20px;
+    line-height: 1.75;
+}
+
+/* Temperature badge */
+.temp-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+.temp-conservative { background: #d4edda; color: #155724; }
+.temp-creative     { background: #fff3cd; color: #856404; }
+</style>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Constants & Feature Definitions
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Mapping of feature name → (display label, temperature category)
+# temperature categories:
+#   "conservative" → 0.3  (workouts, recovery, injuries)
+#   "creative"     → 0.8  (tactical, mental, nutrition)
+FEATURES: dict[str, tuple[str, str]] = {
+    "full_body_workout":       ("💪 Full-Body Workout Plan",                "conservative"),
+    "safe_recovery":           ("🩹 Safe Recovery Training Schedule",        "conservative"),
+    "tactical_tips":           ("🎯 Tactical Coaching Tips",                 "creative"),
+    "nutrition_guide":         ("🥗 Week-Long Nutrition Guide",              "creative"),
+    "warmup_cooldown":         ("🔥 Personalised Warm-Up & Cooldown Routine","conservative"),
+    "mental_focus":            ("🧘 Mental Focus & Visualisation Routine",   "creative"),
+    "hydration_strategy":      ("💧 Hydration & Electrolyte Strategy",       "conservative"),
+    "decision_drills":         ("⚡ Positional Decision-Making Drills",      "conservative"),
+    "mobility_recovery":       ("🦵 Mobility Workouts for Post-Injury",      "conservative"),
+    "stamina_tournament":      ("🏅 Stamina-Building for Tournament Prep",   "conservative"),
+}
+
+TEMPERATURE_MAP = {"conservative": 0.3, "creative": 0.8}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# System Persona
+# ──────────────────────────────────────────────────────────────────────────────
+SYSTEM_PROMPT = (
+    "You are CoachBot AI — a professional youth sports coach with expertise in "
+    "physiology, sports science, nutrition, and sports psychology. "
+    "Always speak in an encouraging, informative, and safety-conscious tone. "
+    "Prioritise athlete wellbeing; include safety warnings when relevant. "
+    "Use clear headings, bullet points, and numbered lists to keep advice "
+    "easy to follow. Never suggest actions that could aggravate existing injuries."
+)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Prompt Templates
+# ──────────────────────────────────────────────────────────────────────────────
+
+def build_prompt(feature_key: str, inputs: dict) -> str:
     """
-    st.markdown(css, unsafe_allow_html=True)
+    Build a detailed, context-rich prompt by combining the chosen feature
+    template with the user's personal inputs.
+    """
+    s = inputs  # shorthand
 
-def glass_metric_card(title, value, unit, accent_class):
-    st.markdown(f"""
-    <div class="glass-card">
-        <div class="glass-title">{title}</div>
-        <div class="glass-metric {accent_class}">{value} <span style="font-size: 1.5rem; font-weight: normal;">{unit}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ==========================================
-# 4. User Interface
-# ==========================================
-# Top Header
-col_logo, col_toggle = st.columns([3, 1])
-with col_logo:
-    st.markdown("<h1 style='color: white; letter-spacing: 4px;'>⚡ AURAFIT AI COACH</h1>", unsafe_allow_html=True)
-with col_toggle:
-    st.session_state.outdoor_mode = st.toggle("☀️ Outdoor Mode", value=st.session_state.outdoor_mode)
-
-inject_custom_css(st.session_state.outdoor_mode)
-
-# Sidebar: Player Profile Data
-st.sidebar.markdown("<h2 style='color: white;'>📋 Athlete Profile</h2>", unsafe_allow_html=True)
-with st.sidebar.form("player_profile_form"):
-    sport = st.text_input("Sport", placeholder="e.g., Soccer, Tennis")
-    position = st.text_input("Position", placeholder="e.g., Striker, Point Guard")
-    injury_history = st.text_area("Injuries / Risk Zones", placeholder="e.g., Tight hamstrings")
-    training_prefs = st.text_area("Training Preferences", placeholder="e.g., HIIT, bodyweight")
-    nutrition_reqs = st.text_area("Nutrition", placeholder="e.g., Vegan, 2500 cal")
-    goal = st.text_input("Primary Goal", placeholder="e.g., Increase stamina")
-    
-    st.markdown("---")
-    selected_feature = st.selectbox("AI Coach Focus:", list(FEATURES.keys()))
-    submit_button = st.form_submit_button("GENERATE AI PLAYBOOK 🚀")
-
-# Form Submission Logic
-if submit_button:
-    if not sport or not position:
-        st.sidebar.warning("⚠️ Sport and Position are required.")
-    else:
-        with st.spinner("AI Coach is analyzing your profile..."):
-            try:
-                user_context = f"""
-                **Athlete Profile:**
-                - Sport: {sport} | Position: {position}
-                - Injury/Risk: {injury_history}
-                - Preferences: {training_prefs}
-                - Nutrition: {nutrition_reqs}
-                - Goal: {goal}
-                """
-                
-                final_prompt = f"{user_context}\n\n**Task:**\n{FEATURES[selected_feature]}"
-                current_temp = get_temperature(selected_feature)
-                
-                model = genai.GenerativeModel(
-                    model_name="gemini-1.5-flash",
-                    system_instruction="Speak in the encouraging, informative, and safety-conscious tone of a professional youth sports coach. Format your response cleanly using markdown."
-                )
-                
-                response = model.generate_content(
-                    final_prompt,
-                    generation_config=genai.types.GenerationConfig(temperature=current_temp)
-                )
-                
-                # Store in session state so it survives UI reruns
-                st.session_state.ai_plan = response.text
-                st.session_state.current_feature = selected_feature
-                
-            except Exception as e:
-                st.sidebar.error(f"🚨 API Error: {str(e)}")
-
-# Main Content Tabs
-tab1, tab2, tab3 = st.tabs(["🏠 Vitals", "🤖 AI Playbook", "📈 Analytics"])
-
-with tab1:
-    col1, col2, col3 = st.columns(3)
-    with col1: glass_metric_card("Heart Rate", "68", "bpm", "glass-accent-magenta")
-    with col2: glass_metric_card("Active Energy", "840", "kcal", "glass-accent-green")
-    with col3: glass_metric_card("Readiness", "92", "10%", "glass-accent-cyan")
-
-with tab2:
-    if st.session_state.ai_plan:
-        st.markdown(f"<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown(f"<h3 style='color: #00FFAA;'>{st.session_state.current_feature}</h3>", unsafe_allow_html=True)
-        st.markdown(st.session_state.ai_plan)
-        st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='glass-card' style='text-align: center; color: rgba(255,255,255,0.5);'>", unsafe_allow_html=True)
-        st.markdown("<h3>No active playbook.</h3><p>Fill out your Athlete Profile in the sidebar and hit Generate.</p>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-with tab3:
-    st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-    st.markdown("<div class='glass-title'>Weekly Intensity Load</div>", unsafe_allow_html=True)
-    chart_data = pd.DataFrame(
-        np.random.randint(40, 100, size=(7, 2)),
-        columns=['Cardio', 'Strength'],
-        index=['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    # Shared context block injected into every prompt
+    context = (
+        f"Athlete Profile:\n"
+        f"- Sport: {s['sport']}\n"
+        f"- Position: {s['position']}\n"
+        f"- Injury History / Risk Zones: {s['injuries'] or 'None reported'}\n"
+        f"- Training Preferences: Intensity = {s['intensity']}, Style = {s['style']}\n"
+        f"- Nutrition: {s['diet']}, Allergies = {s['allergies'] or 'None'}, "
+        f"  Daily Calorie Target = {s['calories']} kcal\n"
+        f"- Desired Goal: {s['goal']}\n\n"
     )
-    st.bar_chart(chart_data, color=["#00FFAA", "#FF00AA"])
-    st.markdown("</div>", unsafe_allow_html=True)
+
+    templates = {
+        "full_body_workout": (
+            f"{context}"
+            f"Create a comprehensive 5-day full-body workout plan tailored specifically "
+            f"for a {s['position']} in {s['sport']}. "
+            f"Ensure exercises strengthen the muscles most used in that position, "
+            f"match the {s['intensity']} intensity preference, and avoid stressing "
+            f"the injury risk zones: {s['injuries'] or 'N/A'}. "
+            f"Include sets, reps, rest periods, and coaching cues for each exercise."
+        ),
+        "safe_recovery": (
+            f"{context}"
+            f"Design a safe, structured 2-week recovery training schedule that accounts "
+            f"for the athlete's injury history in the following areas: {s['injuries'] or 'N/A'}. "
+            f"Include active recovery days, physiotherapy-style exercises, load management "
+            f"guidelines, and clear red-flag signals that mean the athlete should stop "
+            f"and rest immediately."
+        ),
+        "tactical_tips": (
+            f"{context}"
+            f"Provide 10 advanced, position-specific tactical coaching tips for a "
+            f"{s['position']} in {s['sport']}. For each tip, explain the concept, "
+            f"give a real-game scenario, and describe a drill or mental cue to practise it. "
+            f"Align tips with the athlete's goal: {s['goal']}."
+        ),
+        "nutrition_guide": (
+            f"{context}"
+            f"Create a detailed 7-day nutrition plan. Each day should include breakfast, "
+            f"mid-morning snack, lunch, pre-workout meal, post-workout meal, dinner, and "
+            f"an evening snack. Respect these constraints: {s['diet']} diet, "
+            f"allergies to {s['allergies'] or 'none'}, aiming for ~{s['calories']} kcal/day. "
+            f"Include macronutrient breakdown (protein/carbs/fats) for each day and explain "
+            f"how the plan supports the goal: {s['goal']}."
+        ),
+        "warmup_cooldown": (
+            f"{context}"
+            f"Design a science-backed, sport-specific warm-up (10–15 min) and cooldown "
+            f"(10 min) routine for a {s['position']} in {s['sport']}. "
+            f"The warm-up should include dynamic mobility, activation drills, and CNS "
+            f"priming. The cooldown should include static stretching and breathing exercises. "
+            f"Avoid movements that stress: {s['injuries'] or 'N/A'}."
+        ),
+        "mental_focus": (
+            f"{context}"
+            f"Create a personalised 20-minute pre-match mental preparation routine. "
+            f"Include: a guided visualisation script tailored to the role of a "
+            f"{s['position']} in {s['sport']}, self-talk affirmations, a focus-cue "
+            f"keyword strategy, and a breathing protocol. "
+            f"Also provide a 5-minute reset routine for use during half-time or breaks."
+        ),
+        "hydration_strategy": (
+            f"{context}"
+            f"Develop a precise hydration and electrolyte strategy for a {s['sport']} "
+            f"player at {s['intensity']} training intensity. Include: pre-training hydration "
+            f"protocol, during-session fluid intake guidelines (ml per hour), electrolyte "
+            f"replenishment recommendations, post-session rehydration plan, and signs of "
+            f"dehydration to watch for. Tailor advice to goal: {s['goal']}."
+        ),
+        "decision_drills": (
+            f"{context}"
+            f"Design 8 positional decision-making drills specifically for a {s['position']} "
+            f"in {s['sport']}. For each drill: describe the setup, the decision cues the "
+            f"athlete must read, common mistakes, and a progression to increase difficulty. "
+            f"Ensure drills are safe given injury history: {s['injuries'] or 'N/A'}."
+        ),
+        "mobility_recovery": (
+            f"{context}"
+            f"Create a 4-week progressive mobility and flexibility programme to support "
+            f"post-injury recovery, specifically targeting: {s['injuries'] or 'general maintenance'}. "
+            f"Week by week, increase range-of-motion demands safely. Include exercise names, "
+            f"duration, sets, and clear instructions. Flag any exercises that must be "
+            f"approved by a physiotherapist before attempting."
+        ),
+        "stamina_tournament": (
+            f"{context}"
+            f"Build an 8-week stamina and endurance programme to prepare a {s['position']} "
+            f"in {s['sport']} for tournament competition. Include aerobic base building, "
+            f"sport-specific conditioning, interval training, and taper week. "
+            f"Match the {s['intensity']} training style preference and protect the "
+            f"injury risk zones: {s['injuries'] or 'N/A'}. Tie the plan to goal: {s['goal']}."
+        ),
+    }
+
+    return templates[feature_key]
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Gemini API Helper
+# ──────────────────────────────────────────────────────────────────────────────
+
+def call_gemini(prompt: str, temperature: float, api_key: str) -> str:
+    """
+    Call the Gemini 1.5 Flash model with the given prompt and temperature.
+    Returns the generated text or raises an exception on failure.
+    """
+    genai.configure(api_key=api_key)
+
+    generation_config = genai.types.GenerationConfig(
+        temperature=temperature,
+        max_output_tokens=2048,
+        top_p=0.95,
+    )
+
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        generation_config=generation_config,
+        system_instruction=SYSTEM_PROMPT,
+    )
+
+    response = model.generate_content(prompt)
+    return response.text
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Sidebar — User Inputs
+# ──────────────────────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.markdown("## ⚙️ Athlete Profile")
+    st.markdown("---")
+
+    api_key = st.text_input(
+        "🔑 Gemini API Key",
+        type="password",
+        help="Get your free key at https://aistudio.google.com",
+        placeholder="AIza...",
+    )
+
+    st.markdown("### 🏟️ Sport & Position")
+    sport = st.text_input("Sport", placeholder="e.g. Football, Basketball, Tennis")
+    position = st.text_input("Player Position", placeholder="e.g. Centre-Back, Point Guard")
+
+    st.markdown("### 🩺 Health & Training")
+    injuries = st.text_area(
+        "Injury History / Risk Zones",
+        placeholder="e.g. Left knee ACL (recovered), lower back tightness",
+        height=90,
+    )
+    intensity = st.select_slider(
+        "Training Intensity",
+        options=["Light", "Moderate", "High", "Elite"],
+        value="Moderate",
+    )
+    style = st.selectbox(
+        "Training Style",
+        ["Strength-focused", "Endurance-focused", "Skills & Technique",
+         "Mixed / Balanced", "Speed & Agility"],
+    )
+
+    st.markdown("### 🥗 Nutrition")
+    diet = st.selectbox("Dietary Preference", ["Non-Vegetarian", "Vegetarian", "Vegan", "Pescatarian"])
+    allergies = st.text_input("Allergies / Intolerances", placeholder="e.g. Gluten, Lactose")
+    calories = st.number_input("Daily Calorie Target (kcal)", min_value=1200, max_value=6000,
+                               value=2500, step=100)
+
+    st.markdown("### 🎯 Goal")
+    goal = st.text_area(
+        "Desired Goal",
+        placeholder="e.g. Improve speed and reduce injury re-occurrence before the season",
+        height=80,
+    )
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Main Area
+# ──────────────────────────────────────────────────────────────────────────────
+
+st.markdown("""
+<div class="coachbot-header">
+    <h1>🏆 CoachBot AI</h1>
+    <p>Your personal AI sports coach — powered by Gemini 1.5</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Feature Selector
+st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+st.markdown("### 📋 Select a Coaching Feature")
+
+feature_labels = {k: v[0] for k, v in FEATURES.items()}
+selected_key = st.selectbox(
+    "Choose what you'd like help with today:",
+    options=list(feature_labels.keys()),
+    format_func=lambda k: feature_labels[k],
+    label_visibility="collapsed",
+)
+
+# Show temperature info
+selected_category = FEATURES[selected_key][1]
+temp_value = TEMPERATURE_MAP[selected_category]
+badge_class = "temp-conservative" if selected_category == "conservative" else "temp-creative"
+badge_label = f"Temperature: {temp_value} — {'Conservative & Safe' if selected_category == 'conservative' else 'Creative & Expansive'}"
+
+st.markdown(
+    f"<small>AI setting: <span class='temp-badge {badge_class}'>{badge_label}</span></small>",
+    unsafe_allow_html=True,
+)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Generate Button
+generate_clicked = st.button("🚀 Generate Coaching Advice", use_container_width=True)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Generation Logic & Output
+# ──────────────────────────────────────────────────────────────────────────────
+
+if generate_clicked:
+    # ── Validation ──────────────────────────────────────────────────────────
+    errors = []
+    if not api_key:
+        errors.append("🔑 **API Key** is required. Please enter it in the sidebar.")
+    if not sport:
+        errors.append("🏟️ **Sport** is required.")
+    if not position:
+        errors.append("📍 **Player Position** is required.")
+    if not goal:
+        errors.append("🎯 **Desired Goal** is required.")
+
+    if errors:
+        st.error("Please fix the following before generating:")
+        for e in errors:
+            st.markdown(f"- {e}")
+        st.stop()
+
+    # ── Build Inputs Dict ────────────────────────────────────────────────────
+    user_inputs = {
+        "sport": sport,
+        "position": position,
+        "injuries": injuries,
+        "intensity": intensity,
+        "style": style,
+        "diet": diet,
+        "allergies": allergies,
+        "calories": calories,
+        "goal": goal,
+    }
+
+    prompt = build_prompt(selected_key, user_inputs)
+    temperature = TEMPERATURE_MAP[selected_category]
+
+    # ── Call Gemini ──────────────────────────────────────────────────────────
+    with st.spinner("⏳ CoachBot is crafting your personalised plan..."):
+        try:
+            result = call_gemini(prompt, temperature, api_key)
+
+            st.success(f"✅ Plan generated for **{feature_labels[selected_key]}**")
+
+            st.markdown('<div class="response-box">', unsafe_allow_html=True)
+            st.markdown(result)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # Download option
+            st.download_button(
+                label="📥 Download as Text",
+                data=result,
+                file_name=f"coachbot_{selected_key}.txt",
+                mime="text/plain",
+            )
+
+        except genai.types.BlockedPromptException:
+            st.error(
+                "⚠️ The request was blocked by the Gemini safety filters. "
+                "Please rephrase your inputs and try again."
+            )
+        except Exception as exc:
+            st.error(f"❌ API Error: {exc}")
+            st.info(
+                "Common fixes:\n"
+                "- Double-check your API key\n"
+                "- Ensure the Gemini 1.5 API is enabled in your Google Cloud project\n"
+                "- Check your internet connection"
+            )
+
+else:
+    # Welcome placeholder
+    st.info(
+        "👈 Fill in your **Athlete Profile** in the sidebar, choose a "
+        "**Coaching Feature** above, then hit **Generate** to get started!"
+    )
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Coaching Features", "10")
+    with col2:
+        st.metric("AI Model", "Gemini 1.5")
+    with col3:
+        st.metric("Personalisation Inputs", "8")

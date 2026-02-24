@@ -4,6 +4,10 @@ import pandas as pd
 import numpy as np
 import os
 
+# Safely fetch the key from the hidden vault
+API_KEY = st.secrets.get("GEMINI_API_KEY")
+genai.configure(api_key=API_KEY)
+
 # ==========================================
 # 1. Page Configuration & Setup
 # ==========================================

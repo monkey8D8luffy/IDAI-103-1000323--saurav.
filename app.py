@@ -9,22 +9,16 @@ import os
 # ==========================================
 st.set_page_config(page_title="AuraFit AI", page_icon="⚡", layout="wide")
 
-# API Setup
-API_KEY = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
-if not API_KEY:
-    st.error("⚠️ Gemini API Key missing. Please set 'GEMINI_API_KEY' in your environment or secrets.toml.")
-    st.stop()
+# Ask the user for THEIR API key in the sidebar
+st.sidebar.markdown("<h3 style='color: white;'>🔑 Authentication</h3>", unsafe_allow_html=True)
+user_api_key = st.sidebar.text_input("Enter your Gemini API Key", type="password", help="Get your key from Google AI Studio")
 
-genai.configure(api_key=API_KEY)
+if not user_api_key:
+    st.warning("⚠️ Please enter your Gemini API Key in the sidebar to activate the AI Coach.")
+    st.stop() # Stops the app from running further until a key is provided
 
-# Initialize Session States
-if 'outdoor_mode' not in st.session_state:
-    st.session_state.outdoor_mode = False
-if 'ai_plan' not in st.session_state:
-    st.session_state.ai_plan = None
-if 'current_feature' not in st.session_state:
-    st.session_state.current_feature = None
-
+# Configure Gemini with the user's key
+genai.configure(api_key=user_api_key)
 # ==========================================
 # 2. AI Logic & Prompt Engineering
 # ==========================================

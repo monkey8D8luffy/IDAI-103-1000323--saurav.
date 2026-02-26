@@ -10,7 +10,6 @@ import numpy as np
 st.set_page_config(page_title="NextGen Sports Lab", page_icon="⚡", layout="wide")
 
 # Securely fetch the API key from Streamlit Secrets
-# The logic now checks for the key and explains how to fix it
 API_KEY = st.secrets.get("GEMINI_API_KEY")
 
 if not API_KEY:
@@ -19,7 +18,7 @@ if not API_KEY:
     Your **Gemini API Key is missing**. The AI Coach cannot operate without it.
     
     ### How to solve this immediately:
-    1.  If you are running this on Streamlit Cloud, go to your dashboard, click the **three vertical dots (⋮)** next to this app, and select **Secrets**.
+    1.  If you are running this on Streamlit Cloud, go to your dashboard, click the **three vertical dots (⋮)** next to this app, and select **Settings** -> **Secrets**.
     2.  Paste exactly this and click Save (keeping the quotation marks!):
         ```toml
         GEMINI_API_KEY = "your-actual-api-key-from-google"
@@ -136,27 +135,27 @@ def inject_custom_css(is_outdoor_mode):
         border = "1px solid rgba(255, 255, 255, 0.2)"
         blur = "blur(16px)"
         text_shadow = "0 2px 10px rgba(0,0,0,0.8)"
-        bg_css = f"background-image: url('{cite: BG_IMAGE}'); background-size: cover; background-attachment: fixed; background-position: center;"
+        bg_css = f"background-image: url('{BG_IMAGE}'); background-size: cover; background-attachment: fixed; background-position: center;"
 
     css = f"""
     <style>
-        .stApp {{ {cite: bg_css} }}
+        .stApp {{ {bg_css} }}
         
         /* Glass Effect for containers */
-        .glass-card, div, div {{
-            background: {cite: card_bg} !important;
-            backdrop-filter: {cite: blur} !important;
-            -webkit-backdrop-filter: {cite: blur} !important;
-            border: {cite: border} !important;
+        .glass-card, div[data-testid="stForm"], div[data-testid="stExpander"] {{
+            background: {card_bg} !important;
+            backdrop-filter: {blur} !important;
+            -webkit-backdrop-filter: {blur} !important;
+            border: {border} !important;
             border-radius: 20px !important;
             padding: 20px;
             color: white !important;
-            text-shadow: {cite: text_shadow};
+            text-shadow: {text_shadow};
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
         }}
 
         /* Inputs and Text Areas */
-        .stTextInput input, .stTextArea textarea, .stSelectbox div {{
+        .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
             background-color: rgba(0, 0, 0, 0.4) !important;
             color: white !important;
             border: 1px solid rgba(255,255,255,0.3) !important;
@@ -183,14 +182,14 @@ def inject_custom_css(is_outdoor_mode):
         }}
 
         /* Tabs styling over glass */
-        button {{
+        button[data-baseweb="tab"] {{
             background-color: rgba(0,0,0,0.4) !important;
             color: white !important;
             border-radius: 10px 10px 0 0 !important;
             border: 1px solid rgba(255,255,255,0.1) !important;
             margin-right: 5px;
         }}
-        button {{
+        button[data-baseweb="tab"][aria-selected="true"] {{
             background-color: rgba(255, 255, 255, 0.15) !important;
             border-bottom: 2px solid #FFFFFF !important;
             color: #FFFFFF !important;
@@ -228,7 +227,6 @@ with st.sidebar.form("profile_form"):
     st.form_submit_button("Save Profile Data")
 
 # --- MAIN TABS ---
-# Note: The "Vitals" page is removed; "AI Coach" is the MAIN FACE
 tab1, tab2, tab3, tab4 = st.tabs(["💬 AI Coach", "🤖 Playbook & Diet", "📅 Calendar", "⚠️ Help"])
 
 # ------------------------------------------
@@ -277,8 +275,7 @@ with tab1:
         # Display Chat History
         for msg in st.session_state.chat_history:
             css_class = "chat-user" if msg['role'] == 'user' else "chat-coach"
-            # Explicitly rendering markdown within the custom HTML structure is vital
-            st.markdown(f"<div class='{cite: css_class}'>{cite: msg['text']}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='{css_class}'>{msg['text']}</div>", unsafe_allow_html=True)
             
         # Unified chat input anchored at bottom of thread
         with st.form("active_chat_form", clear_on_submit=True):
@@ -304,12 +301,12 @@ with tab2:
     with c_play:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         st.markdown("<h3 style='color:#FFFFFF;'>🤖 Auto-Playbook</h3>", unsafe_allow_html=True)
-        selected_feature = st.selectbox("Select Playbook Focus:", list(cite: FEATURES.keys()))
+        selected_feature = st.selectbox("Select Playbook Focus:", list(FEATURES.keys()))
         if st.button("Generate Selected Playbook"):
             if st.session_state.sport:
                 with st.spinner("Drafting Playbook..."):
                     ctx = f"Sport: {st.session_state.sport}, Pos: {st.session_state.position}, Injuries: {st.session_state.injuries}, Goal: {st.session_state.goal}"
-                    prompt = f"{cite: ctx}\n\nTask: {cite: FEATURES}"
+                    prompt = f"{ctx}\n\nTask: {FEATURES[selected_feature]}"
                     model = genai.GenerativeModel("gemini-1.5-flash", system_instruction="Encouraging, safety-conscious professional coach.")
                     res = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=get_temperature(selected_feature)))
                     st.session_state.ai_plan = res.text
@@ -319,7 +316,7 @@ with tab2:
                 
         if st.session_state.ai_plan:
             st.markdown("---")
-            st.markdown(f"<h4 style='color:#ccc;'>{cite: st.session_state.current_feature}</h4>", unsafe_allow_html=True)
+            st.markdown(f"<h4 style='color:#ccc;'>{st.session_state.current_feature}</h4>", unsafe_allow_html=True)
             st.markdown(st.session_state.ai_plan)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -344,7 +341,7 @@ with tab2:
 # ------------------------------------------
 # TAB 3: Calendar
 # ------------------------------------------
-with tab4:
+with tab3:
     st.markdown("<br><div class='glass-card'><h3 style='color:#FFFFFF;'>📅 Weekly Calendar</h3>", unsafe_allow_html=True)
     if st.button("Generate Weekly Calendar🗓️"):
         if st.session_state.sport:
@@ -360,7 +357,7 @@ with tab4:
 # ------------------------------------------
 # TAB 4: Help & Emergency
 # ------------------------------------------
-with tab5:
+with tab4:
     st.markdown("<br><div class='glass-card'><h3 style='color:#FFFFFF;'>⚠️ Help & First Aid</h3>", unsafe_allow_html=True)
     help_query = st.text_input("What happened?", placeholder="e.g. Rolled ankle, Dehydration symptoms")
     if st.button("Get Safe Guidance"):

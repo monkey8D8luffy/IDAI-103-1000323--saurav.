@@ -17,7 +17,7 @@ if not API_KEY:
 
 genai.configure(api_key=API_KEY)
 
-# Initialize Session States to remember user data across tab clicks
+# Initialize Session States to remember user data across interactions
 if 'outdoor_mode' not in st.session_state: st.session_state.outdoor_mode = False
 if 'ai_plan' not in st.session_state: st.session_state.ai_plan = None
 if 'current_feature' not in st.session_state: st.session_state.current_feature = None
@@ -25,7 +25,7 @@ if 'diet_plan' not in st.session_state: st.session_state.diet_plan = None
 if 'chat_history' not in st.session_state: st.session_state.chat_history = []
 if 'workout_calendar' not in st.session_state: st.session_state.workout_calendar = None
 if 'help_response' not in st.session_state: st.session_state.help_response = None
-if 'quick_prompts' not in st.session_state: st.session_state.quick_prompts = None
+if 'quick_prompts_list' not in st.session_state: st.session_state.quick_prompts_list = []
 
 # Remember sidebar inputs
 for key in ['sport', 'position', 'injuries', 'prefs', 'nutrition', 'calories', 'goal']:
@@ -60,14 +60,18 @@ def generate_diet_plan(sport, position, goal, nutrition, calories):
     except Exception as e:
         return f"🚨 API Error: {str(e)}"
 
+@st.cache_data(show_spinner=False)
 def generate_quick_prompts(sport):
+    # Generates a list of exactly 4 specific prompts to display as UI buttons
     try:
-        prompt = f"Provide exactly 5 unique, highly specific single-sentence prompt suggestions a {sport} player could ask their AI coach. Format as a simple bulleted list."
+        sport_context = sport if sport else "general fitness"
+        prompt = f"Write exactly 4 short, highly specific, single-sentence prompt suggestions that a {sport_context} player would ask an AI sports coach. Do not use numbers or bullet points. Separate each prompt with a pipe character '|'."
         model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=0.7))
-        return response.text
-    except Exception as e:
-        return f"🚨 API Error: {str(e)}"
+        response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=0.8))
+        prompts = [p.strip() for p in response.text.split('|') if p.strip()]
+        return prompts[:4] # Ensure we only get 4
+    except:
+        return ["Design a 20-minute HIIT warm-up.", "How can I improve my reaction time?", "Give me a post-workout recovery routine.", "What should I eat before a big match?"]
 
 def generate_calendar(sport, position, goal):
     try:
@@ -87,10 +91,21 @@ def generate_help(query, sport):
     except Exception as e:
         return f"🚨 API Error: {str(e)}"
 
+def process_chat(user_msg):
+    st.session_state.chat_history.append({"role": "user", "text": user_msg})
+    
+    ctx = f"Athlete Profile: {st.session_state.sport} ({st.session_state.position}). Goal: {st.session_state.goal}. Injuries: {st.session_state.injuries}."
+    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction="You are a brief, encouraging, and highly professional sports coach. Prioritize safe form and actionable advice.")
+    
+    # Passing context + history for continuity (simplified for Streamlit flow)
+    full_prompt = f"{ctx}\n\nUser: {user_msg}"
+    response = model.generate_content(full_prompt)
+    
+    st.session_state.chat_history.append({"role": "coach", "text": response.text})
+
 # ==========================================
 # 3. CSS Injection: Clear Glass OS
 # ==========================================
-# A dark, high-contrast sports background matching your aesthetic
 BG_IMAGE = "https://images.unsplash.com/photo-1518063319789-7217e6706b04?q=80&w=2000&auto=format&fit=crop"
 
 def inject_custom_css(is_outdoor_mode):
@@ -130,6 +145,25 @@ def inject_custom_css(is_outdoor_mode):
             color: white !important;
             border: 1px solid rgba(255,255,255,0.3) !important;
             border-radius: 10px !important;
+            padding: 12px !important;
+            font-size: 1.1rem !important;
+        }}
+
+        /* Prompt Buttons */
+        .stButton button {{
+            background-color: rgba(0, 0, 0, 0.4) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border-radius: 12px !important;
+            color: #00FFAA !important;
+            transition: all 0.2s;
+            width: 100%;
+            height: 100%;
+            text-align: left;
+            padding: 15px !important;
+        }}
+        .stButton button:hover {{
+            background-color: rgba(0, 255, 170, 0.2) !important;
+            border-color: #00FFAA !important;
         }}
 
         /* Tabs styling */
@@ -150,23 +184,9 @@ def inject_custom_css(is_outdoor_mode):
         .chat-user {{ background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 15px 15px 0 15px; margin-bottom: 10px; text-align: right; border: 1px solid rgba(255,255,255,0.2); }}
         .chat-coach {{ background: rgba(0, 255, 170, 0.15); padding: 15px; border-radius: 15px 15px 15px 0; margin-bottom: 20px; border: 1px solid rgba(0,255,170,0.3); }}
 
-        /* Typography */
-        .glass-title {{ font-size: 1.1rem; color: #ccc; text-transform: uppercase; letter-spacing: 1px; }}
-        .glass-metric {{ font-size: 3rem; font-weight: 800; line-height: 1.2; }}
-        .cyan {{ color: #00E5FF; text-shadow: 0 0 15px rgba(0, 229, 255, 0.6); }}
-        .green {{ color: #00FFAA; text-shadow: 0 0 15px rgba(0, 255, 170, 0.6); }}
-        .magenta {{ color: #FF00AA; text-shadow: 0 0 15px rgba(255, 0, 170, 0.6); }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
-
-def metric_card(title, value, unit, color_class):
-    st.markdown(f"""
-    <div class="glass-card" style="text-align: center;">
-        <div class="glass-title">{title}</div>
-        <div class="glass-metric {color_class}">{value} <span style="font-size: 1.2rem;">{unit}</span></div>
-    </div>
-    """, unsafe_allow_html=True)
 
 # ==========================================
 # 4. User Interface Layout
@@ -189,54 +209,101 @@ with st.sidebar.form("profile_form"):
     st.session_state.nutrition = st.text_input("Diet (Veg/Allergies)", value=st.session_state.nutrition)
     st.session_state.calories = st.text_input("Calorie Goal", value=st.session_state.calories)
     st.session_state.goal = st.text_input("Primary Goal", value=st.session_state.goal)
-    
-    st.markdown("---")
-    selected_feature = st.selectbox("Playbook Focus:", list(FEATURES.keys()))
-    if st.form_submit_button("GENERATE PLAYBOOK 🚀"):
-        if st.session_state.sport and st.session_state.position:
-            with st.spinner("Drafting Playbook..."):
-                ctx = f"Sport: {st.session_state.sport}, Pos: {st.session_state.position}, Injuries: {st.session_state.injuries}, Goal: {st.session_state.goal}"
-                prompt = f"{ctx}\n\nTask: {FEATURES[selected_feature]}"
-                model = genai.GenerativeModel("gemini-1.5-flash", system_instruction="Encouraging, safety-conscious professional coach.")
-                res = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=get_temperature(selected_feature)))
-                st.session_state.ai_plan = res.text
-                st.session_state.current_feature = selected_feature
-        else:
-            st.error("Sport and Position required!")
-
-# Sidebar Quick Prompts
-if st.sidebar.button("💡 Get Quick Prompts"):
-    if st.session_state.sport:
-        with st.spinner("Thinking..."):
-            st.session_state.quick_prompts = generate_quick_prompts(st.session_state.sport)
-    else:
-        st.sidebar.warning("Enter your sport first.")
-
-if st.session_state.quick_prompts:
-    st.sidebar.markdown(f"<div class='glass-card' style='padding: 10px; font-size: 0.9em;'>{st.session_state.quick_prompts}</div>", unsafe_allow_html=True)
-
+    st.form_submit_button("Save Profile Data")
 
 # --- MAIN TABS ---
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏠 Vitals", "🤖 Playbook & Diet", "💬 Chat", "📅 Calendar", "⚠️ Help"])
+# Note: Chat is now the FIRST tab (The Main Face)
+tab1, tab2, tab3, tab4 = st.tabs(["💬 AI Coach", "🤖 Playbook & Diet", "📅 Calendar", "⚠️ Help"])
 
+# ------------------------------------------
+# TAB 1: Chatbot & Home Interface
+# ------------------------------------------
 with tab1:
     st.markdown("<br>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns(3)
-    with c1: metric_card("Heart Rate", "112", "bpm", "magenta")
-    with c2: metric_card("Active Energy", "1,240", "kcal", "green")
-    with c3: metric_card("Readiness", "88", "%", "cyan")
+    
+    # EMPTY STATE (No chat history yet)
+    if len(st.session_state.chat_history) == 0:
+        st.markdown("<h2 style='text-align: center; color: white; margin-bottom: 30px;'>What do you want to train today?</h2>", unsafe_allow_html=True)
+        
+        # Central Search Bar
+        with st.form("home_search_form", clear_on_submit=True):
+            col_search, col_send = st.columns([6, 1])
+            with col_search:
+                user_msg = st.text_input("Message CoachBot...", label_visibility="collapsed", placeholder="Ask a question, request a drill, or generate a playbook...")
+            with col_send:
+                submitted = st.form_submit_button("Send 哨", use_container_width=True)
+            
+            if submitted and user_msg:
+                with st.spinner("Analyzing..."):
+                    process_chat(user_msg)
+                st.rerun()
 
+        # Prompt Recommendations below search bar
+        st.markdown("<br><p style='text-align: center; color: #ccc;'>💡 <b>Quick Prompts</b></p>", unsafe_allow_html=True)
+        prompts = generate_quick_prompts(st.session_state.sport)
+        
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            if st.button(prompts[0], key="p1"): 
+                process_chat(prompts[0]); st.rerun()
+            if st.button(prompts[1], key="p2"): 
+                process_chat(prompts[1]); st.rerun()
+        with col_p2:
+            if st.button(prompts[2], key="p3"): 
+                process_chat(prompts[2]); st.rerun()
+            if len(prompts) > 3 and st.button(prompts[3], key="p4"): 
+                process_chat(prompts[3]); st.rerun()
+
+    # ACTIVE CHAT STATE
+    else:
+        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        
+        # Display Chat History
+        for msg in st.session_state.chat_history:
+            css_class = "chat-user" if msg['role'] == 'user' else "chat-coach"
+            st.markdown(f"<div class='{css_class}'>{msg['text']}</div>", unsafe_allow_html=True)
+            
+        # Chat Input anchored at bottom of thread
+        with st.form("active_chat_form", clear_on_submit=True):
+            col_input, col_btn = st.columns([5, 1])
+            with col_input:
+                user_msg = st.text_input("Reply to CoachBot...", label_visibility="collapsed")
+            with col_btn:
+                submitted = st.form_submit_button("Send 哨")
+                
+            if submitted and user_msg:
+                with st.spinner("Coach is typing..."):
+                    process_chat(user_msg)
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# ------------------------------------------
+# TAB 2: Playbook & Diet
+# ------------------------------------------
 with tab2:
     st.markdown("<br>", unsafe_allow_html=True)
     c_play, c_diet = st.columns(2)
     
     with c_play:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color:#00FFAA;'>🤖 Auto-Playbook</h3>", unsafe_allow_html=True)
+        selected_feature = st.selectbox("Select Playbook Focus:", list(FEATURES.keys()))
+        if st.button("Generate Selected Playbook"):
+            if st.session_state.sport:
+                with st.spinner("Drafting Playbook..."):
+                    ctx = f"Sport: {st.session_state.sport}, Pos: {st.session_state.position}, Injuries: {st.session_state.injuries}, Goal: {st.session_state.goal}"
+                    prompt = f"{ctx}\n\nTask: {FEATURES[selected_feature]}"
+                    model = genai.GenerativeModel("gemini-1.5-flash", system_instruction="Encouraging, safety-conscious professional coach.")
+                    res = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=get_temperature(selected_feature)))
+                    st.session_state.ai_plan = res.text
+                    st.session_state.current_feature = selected_feature
+            else:
+                st.error("Sport required in sidebar!")
+                
         if st.session_state.ai_plan:
-            st.markdown(f"<h3 style='color:#00FFAA;'>{st.session_state.current_feature}</h3>", unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown(f"<h4 style='color:#ccc;'>{st.session_state.current_feature}</h4>", unsafe_allow_html=True)
             st.markdown(st.session_state.ai_plan)
-        else:
-            st.markdown("<h3>No Playbook Yet</h3><p>Fill out sidebar and click Generate.</p>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     with c_diet:
@@ -253,36 +320,14 @@ with tab2:
                 st.warning("Ensure Sport and Diet fields are filled in the sidebar.")
         
         if st.session_state.diet_plan:
+            st.markdown("---")
             st.markdown(st.session_state.diet_plan)
         st.markdown("</div>", unsafe_allow_html=True)
 
+# ------------------------------------------
+# TAB 3: Calendar
+# ------------------------------------------
 with tab3:
-    st.markdown("<br><div class='glass-card'><h3 style='color:#00FFAA;'>💬 Coach Chat</h3>", unsafe_allow_html=True)
-    
-    # Display Chat History
-    for msg in st.session_state.chat_history:
-        css_class = "chat-user" if msg['role'] == 'user' else "chat-coach"
-        st.markdown(f"<div class='{css_class}'>{msg['text']}</div>", unsafe_allow_html=True)
-        
-    # Chat Input
-    with st.form("chat_form", clear_on_submit=True):
-        col_input, col_btn = st.columns([5, 1])
-        with col_input:
-            user_msg = st.text_input("Ask CoachBot:")
-        with col_btn:
-            submitted = st.form_submit_button("Send 哨")
-            
-        if submitted and user_msg:
-            st.session_state.chat_history.append({"role": "user", "text": user_msg})
-            with st.spinner("Coach is typing..."):
-                ctx = f"Context: {st.session_state.sport} player. Query: {user_msg}"
-                model = genai.GenerativeModel("gemini-1.5-flash", system_instruction="Brief, encouraging sports coach.")
-                res = model.generate_content(ctx)
-                st.session_state.chat_history.append({"role": "coach", "text": res.text})
-            st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
-
-with tab4:
     st.markdown("<br><div class='glass-card'><h3 style='color:#00FFAA;'>📅 Weekly Calendar</h3>", unsafe_allow_html=True)
     if st.button("Generate Weekly Calendar"):
         if st.session_state.sport:
@@ -295,7 +340,10 @@ with tab4:
         st.markdown(st.session_state.workout_calendar)
     st.markdown("</div>", unsafe_allow_html=True)
 
-with tab5:
+# ------------------------------------------
+# TAB 4: Help & Emergency
+# ------------------------------------------
+with tab4:
     st.markdown("<br><div class='glass-card'><h3 style='color:#FF00AA;'>⚠️ Emergency & First Aid</h3>", unsafe_allow_html=True)
     help_query = st.text_input("What happened?", placeholder="e.g. Rolled ankle, Dislocated shoulder")
     if st.button("Get Safe Guidance"):

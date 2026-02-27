@@ -2,8 +2,6 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import numpy as np
-import base64
-import os
 
 # ==========================================
 # 1. Page Configuration & Setup
@@ -125,30 +123,13 @@ def handle_prompt_click(prompt_text):
     process_chat(prompt_text)
 
 # ==========================================
-# 3. CSS Injection & Smart Background Image Loader
+# 3. CSS Injection & Web-Hosted Background Image
 # ==========================================
-@st.cache_data
-def get_absolute_local_bg():
-    try:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        # Actively hunts for ANY image format to bypass renaming errors
-        possible_filenames = ['background.jpg', 'background.png', 'background.jpg.png']
-        
-        for filename in possible_filenames:
-            file_path = os.path.join(current_dir, filename)
-            if os.path.exists(file_path):
-                with open(file_path, 'rb') as f:
-                    data = f.read()
-                # Dynamically set mime type
-                mime = "image/png" if "png" in filename.lower() else "image/jpeg"
-                return f"url('data:{mime};base64,{base64.b64encode(data).decode()}')"
-        return None
-    except Exception as e:
-        return None
+def inject_custom_css(is_outdoor_mode):
+    # DIRECT WEB URL TO A B&W CONCRETE COURT (Bypasses all local file issues)
+    # The &sat=-100 parameter forces the image to be perfectly black and white
+    BG_URL = "https://images.unsplash.com/photo-1504450758481-7338eba7524a?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80&sat=-100"
 
-img_bg_css = get_absolute_local_bg() 
-
-def inject_custom_css(is_outdoor_mode, img_url_css):
     if is_outdoor_mode:
         card_bg = "rgba(10, 10, 10, 0.98)"
         border = "2px solid #FFFFFF"
@@ -156,31 +137,24 @@ def inject_custom_css(is_outdoor_mode, img_url_css):
         text_shadow = "none"
         bg_css = "background-color: #000000 !important;"
     else:
-        # High-opacity cards to stand out clearly against the B&W background
         card_bg = "rgba(15, 15, 15, 0.75)"
         border = "1px solid rgba(255, 255, 255, 0.15)"
         blur = "blur(24px)"
         text_shadow = "0 2px 10px rgba(0,0,0,0.9)"
-        
-        if img_url_css:
-            bg_css = f"background-image: {img_url_css} !important; background-size: cover !important; background-attachment: fixed !important; background-position: center !important;"
-        else:
-            fallback_img = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop&grayscale"
-            bg_css = f"background-image: url('{fallback_img}') !important; background-size: cover !important; background-attachment: fixed !important; background-position: center !important;"
+        bg_css = f"background-image: url('{BG_URL}') !important; background-size: cover !important; background-attachment: fixed !important; background-position: center !important;"
 
     css = f"""
     <style>
         /* BULLETPROOF BACKGROUND INJECTION */
-        [data-testid="stAppViewContainer"] {{
+        .stApp {{
             {bg_css}
         }}
         
-        /* Force Streamlit Header to be transparent so it doesn't block the image */
+        /* Force Streamlit Header to be transparent */
         [data-testid="stHeader"] {{
             background-color: rgba(0, 0, 0, 0) !important;
         }}
         
-        /* Adjust layout to match the mockup grid */
         .main .block-container {{
             padding-top: 2rem !important;
             padding-left: 2rem !important;
@@ -188,7 +162,6 @@ def inject_custom_css(is_outdoor_mode, img_url_css):
             max-width: 100% !important;
         }}
 
-        /* HIDE THE NATIVE SLIDER ARROW */
         [data-testid="collapsedControl"] {{ display: none !important; }}
         
         /* STATIC MINIMALIST PILL SIDEBAR */
@@ -205,14 +178,13 @@ def inject_custom_css(is_outdoor_mode, img_url_css):
             backdrop-filter: blur(24px) !important;
             -webkit-backdrop-filter: blur(24px) !important;
             border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            border-radius: 30px !important; /* Exaggerated pill shape */
+            border-radius: 30px !important;
             margin: 20px 0px 20px 20px !important;
             padding: 30px 15px !important;
             height: calc(100vh - 40px) !important;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6) !important;
         }}
 
-        /* Format Radio Buttons as Clean Menu Items */
         div[role="radiogroup"] > label > div:first-child {{ display: none; }}
         
         div[role="radiogroup"] > label {{
@@ -234,7 +206,6 @@ def inject_custom_css(is_outdoor_mode, img_url_css):
         }}
         div[role="radiogroup"] p {{ font-size: 1.05rem !important; font-weight: 500; color: white; margin: 0; padding-left: 5px; }}
 
-        /* Glass Cards */
         .glass-card, div[data-testid="stForm"], div[data-testid="stExpander"] {{
             background: {card_bg} !important;
             backdrop-filter: {blur} !important;
@@ -247,7 +218,6 @@ def inject_custom_css(is_outdoor_mode, img_url_css):
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
         }}
 
-        /* Inputs */
         .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
             background-color: rgba(0, 0, 0, 0.8) !important;
             color: white !important;
@@ -257,7 +227,6 @@ def inject_custom_css(is_outdoor_mode, img_url_css):
             font-size: 1.1rem !important;
         }}
 
-        /* Buttons */
         .stButton button {{
             background-color: rgba(0, 0, 0, 0.8) !important;
             border: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -273,7 +242,6 @@ def inject_custom_css(is_outdoor_mode, img_url_css):
             border-color: #FFFFFF !important;
         }}
 
-        /* Chat Bubbles */
         .chat-user {{ 
             background: rgba(40, 40, 40, 0.95); 
             padding: 15px; 
@@ -304,7 +272,7 @@ with col_logo:
 with col_toggle:
     st.session_state.outdoor_mode = st.toggle("☀️ Outdoor Mode", value=st.session_state.outdoor_mode)
 
-inject_custom_css(st.session_state.outdoor_mode, img_bg_css)
+inject_custom_css(st.session_state.outdoor_mode)
 
 # ==========================================
 # 5. Fixed Vertical "Floating Pill" Navbar

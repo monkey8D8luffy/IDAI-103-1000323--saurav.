@@ -2,6 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import numpy as np
+import base64
+import os
 
 # ==========================================
 # 1. Page Configuration & Setup
@@ -119,35 +121,104 @@ def process_chat(user_msg):
     except Exception as e:
         st.session_state.chat_history.append({"role": "coach", "text": f"🚨 Connection Error: Unable to reach the playbook database. ({str(e)})"})
 
-# Bulletproof Callback to guarantee button clicks register instantly
 def handle_prompt_click(prompt_text):
     process_chat(prompt_text)
 
 # ==========================================
 # 3. CSS Injection & Background Image
 # ==========================================
-def inject_custom_css(is_outdoor_mode):
-    # Force the Black & White concrete gym image URL directly to override caching
-    BW_GYM_URL = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop"
-    
+@st.cache_data
+def get_base64_of_bin_file(bin_file):
+    try:
+        with open(bin_file, 'rb') as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except FileNotFoundError:
+        return None
+
+img_base64 = get_base64_of_bin_file('background.jpg') 
+
+def inject_custom_css(is_outdoor_mode, img_b64):
     if is_outdoor_mode:
-        card_bg = "rgba(10, 10, 10, 0.95)"
+        card_bg = "rgba(10, 10, 10, 0.98)"
         border = "2px solid #FFFFFF"
         blur = "blur(0px)"
         text_shadow = "none"
         bg_css = "background-color: #000000;"
     else:
-        card_bg = "rgba(255, 255, 255, 0.08)"
-        border = "1px solid rgba(255, 255, 255, 0.2)"
-        blur = "blur(16px)"
-        text_shadow = "0 2px 10px rgba(0,0,0,0.8)"
-        bg_css = f"background-image: url('{BW_GYM_URL}'); background-size: cover; background-attachment: fixed; background-position: center;"
+        # MASSIVELY INCREASED OPACITY HERE for better readability
+        card_bg = "rgba(15, 15, 15, 0.85)"
+        border = "1px solid rgba(255, 255, 255, 0.25)"
+        blur = "blur(24px)"
+        text_shadow = "0 2px 10px rgba(0,0,0,0.9)"
+        
+        if img_b64:
+            bg_css = f"background-image: url('data:image/jpeg;base64,{img_b64}'); background-size: cover; background-attachment: fixed; background-position: center;"
+        else:
+            fallback_img = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop"
+            bg_css = f"background-image: url('{fallback_img}'); background-size: cover; background-attachment: fixed; background-position: center;"
 
     css = f"""
     <style>
         .stApp {{ {bg_css} }}
         
-        /* Glass Effect */
+        /* 1. HIDE THE NATIVE SLIDER ARROW */
+        [data-testid="collapsedControl"] {{ display: none !important; }}
+        
+        /* 2. CREATE THE HOVER-EXPAND NAV BAR */
+        [data-testid="stSidebar"] {{
+            width: 80px !important;
+            min-width: 80px !important;
+            max-width: 80px !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            overflow-x: hidden !important;
+            background-color: rgba(10, 10, 10, 0.95) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+            z-index: 999999 !important;
+        }}
+        
+        [data-testid="stSidebar"]:hover {{
+            width: 260px !important;
+            min-width: 260px !important;
+            max-width: 260px !important;
+        }}
+        
+        /* Center icons when collapsed */
+        [data-testid="stSidebarUserContent"] {{
+            padding-left: 10px !important;
+            padding-right: 10px !important;
+        }}
+
+        /* Format Radio Buttons as Navbar Items */
+        div[role="radiogroup"] > label > div:first-child {{ display: none; }}
+        
+        div[role="radiogroup"] > label {{
+            background: rgba(255,255,255,0.05);
+            padding: 15px 20px !important;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: 0.3s;
+            cursor: pointer;
+            width: 220px !important; /* Forces width so text doesn't wrap when collapsed */
+            white-space: nowrap !important;
+            display: flex !important;
+            align-items: center !important;
+        }}
+        div[role="radiogroup"] > label:hover {{ background: rgba(255,255,255,0.15); }}
+        div[role="radiogroup"] > label[data-checked="true"] {{ background: rgba(255,255,255,0.25); border-left: 4px solid #00FFAA; }}
+        div[role="radiogroup"] p {{ font-size: 1.1rem !important; font-weight: bold; color: white; margin: 0; padding-left: 5px; }}
+
+        /* Sidebar Title Animation */
+        .sidebar-title {{
+            white-space: nowrap;
+            overflow: hidden;
+            color: white; 
+            text-align: center; 
+            letter-spacing: 2px;
+        }}
+
+        /* INCREASED OPACITY FOR GLASS CARDS & INPUTS */
         .glass-card, div[data-testid="stForm"], div[data-testid="stExpander"] {{
             background: {card_bg} !important;
             backdrop-filter: {blur} !important;
@@ -157,23 +228,21 @@ def inject_custom_css(is_outdoor_mode):
             padding: 20px;
             color: white !important;
             text-shadow: {text_shadow};
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.7) !important;
         }}
 
-        /* Inputs */
         .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
-            background-color: rgba(0, 0, 0, 0.6) !important;
+            background-color: rgba(10, 10, 10, 0.95) !important; /* Dark solid base for readable text */
             color: white !important;
-            border: 1px solid rgba(255,255,255,0.3) !important;
+            border: 1px solid rgba(255,255,255,0.4) !important;
             border-radius: 10px !important;
             padding: 12px !important;
             font-size: 1.1rem !important;
         }}
 
-        /* Action Buttons (Fixed layout issues) */
         .stButton button {{
-            background-color: rgba(0, 0, 0, 0.6) !important;
-            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            background-color: rgba(10, 10, 10, 0.8) !important;
+            border: 1px solid rgba(255, 255, 255, 0.4) !important;
             border-radius: 12px !important;
             color: #FFFFFF !important;
             transition: all 0.2s;
@@ -182,36 +251,28 @@ def inject_custom_css(is_outdoor_mode):
             height: auto !important; 
         }}
         .stButton button:hover {{
-            background-color: rgba(255, 255, 255, 0.15) !important;
-            border-color: #FFFFFF !important;
+            background-color: rgba(0, 255, 170, 0.2) !important;
+            border-color: #00FFAA !important;
         }}
 
-        /* Sidebar Vertical Navigation Menu */
-        section[data-testid="stSidebar"] {{
-            background-color: rgba(0, 0, 0, 0.8) !important;
-            backdrop-filter: blur(20px) !important;
-            border-right: 1px solid rgba(255,255,255,0.1);
+        /* INCREASED OPACITY FOR CHAT BUBBLES */
+        .chat-user {{ 
+            background: rgba(40, 40, 40, 0.95); /* Nearly solid dark gray */
+            padding: 15px; 
+            border-radius: 15px 15px 0 15px; 
+            margin-bottom: 10px; 
+            text-align: right; 
+            border: 1px solid rgba(255,255,255,0.3); 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }}
-        
-        div[role="radiogroup"] > label > div:first-child {{ display: none; }}
-        
-        div[role="radiogroup"] > label {{
-            background: rgba(255,255,255,0.05);
-            padding: 15px 20px;
-            border-radius: 10px;
-            margin-bottom: 12px;
-            border: 1px solid rgba(255,255,255,0.1);
-            transition: 0.3s;
-            cursor: pointer;
-            width: 100%;
+        .chat-coach {{ 
+            background: rgba(10, 10, 10, 0.95); /* Solid black base */
+            padding: 15px; 
+            border-radius: 15px 15px 15px 0; 
+            margin-bottom: 20px; 
+            border: 1px solid rgba(0,255,170,0.5); 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }}
-        div[role="radiogroup"] > label:hover {{ background: rgba(255,255,255,0.15); }}
-        div[role="radiogroup"] > label[data-checked="true"] {{ background: rgba(255,255,255,0.2); border-left: 5px solid #FFFFFF; }}
-        div[role="radiogroup"] p {{ font-size: 1.1rem !important; font-weight: bold; color: white; margin: 0; }}
-
-        /* Chat bubbles */
-        .chat-user {{ background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 15px 15px 0 15px; margin-bottom: 10px; text-align: right; border: 1px solid rgba(255,255,255,0.2); }}
-        .chat-coach {{ background: rgba(255, 255, 255, 0.03); padding: 15px; border-radius: 15px 15px 15px 0; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1); }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -225,12 +286,12 @@ with col_logo:
 with col_toggle:
     st.session_state.outdoor_mode = st.toggle("☀️ Outdoor Mode", value=st.session_state.outdoor_mode)
 
-inject_custom_css(st.session_state.outdoor_mode)
+inject_custom_css(st.session_state.outdoor_mode, img_base64)
 
 # ==========================================
-# 5. Sidebar - Vertical Navigation Menu
+# 5. Fixed Vertical Hover-Navigation Bar
 # ==========================================
-st.sidebar.markdown("<br><h2 style='color: white; text-align: center; letter-spacing: 2px;'>SYSTEM MENU</h2><br>", unsafe_allow_html=True)
+st.sidebar.markdown("<br><h3 class='sidebar-title'>⚙️ MENU</h3><br>", unsafe_allow_html=True)
 
 selected_tab = st.sidebar.radio(
     "Navigation",
@@ -247,7 +308,7 @@ selected_tab = st.sidebar.radio(
 # ------------------------------------------
 if selected_tab == "💬 AI Coach":
     if len(st.session_state.chat_history) == 0:
-        st.markdown("<br><h2 style='text-align: center; color: white; margin-bottom: 30px;'>What are we training today?</h2>", unsafe_allow_html=True)
+        st.markdown("<br><h2 style='text-align: center; color: white; margin-bottom: 30px; text-shadow: 0 4px 10px #000;'>What are we training today?</h2>", unsafe_allow_html=True)
         
         with st.form("home_search_form", clear_on_submit=True):
             col_search, col_send = st.columns([6, 1])
@@ -261,10 +322,9 @@ if selected_tab == "💬 AI Coach":
                     process_chat(user_msg)
                 st.rerun()
 
-        st.markdown("<br><p style='text-align: center; color: #ccc;'>💡 <b>NextGen Prompts</b></p>", unsafe_allow_html=True)
+        st.markdown("<br><p style='text-align: center; color: #ccc; text-shadow: 0 2px 5px #000;'>💡 <b>NextGen Prompts</b></p>", unsafe_allow_html=True)
         prompts = generate_quick_prompts(st.session_state.sport)
         
-        # Bulletproof Callbacks for Quick Prompts
         col_p1, col_p2 = st.columns(2)
         with col_p1:
             st.button(prompts[0], key="p1", on_click=handle_prompt_click, args=(prompts[0],), use_container_width=True)
@@ -386,7 +446,7 @@ elif selected_tab == "📅 Calendar":
 elif selected_tab == "⚠️ Help & First Aid":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    st.markdown("<h3 style='color:#FFFFFF;'>💎 Pre-Made Emergency Protocols</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:#FFFFFF; text-shadow: 0 2px 5px #000;'>💎 Pre-Made Emergency Protocols</h3>", unsafe_allow_html=True)
     col_em1, col_em2 = st.columns(2)
     
     with col_em1:

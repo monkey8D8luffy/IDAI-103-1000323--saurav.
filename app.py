@@ -2,12 +2,14 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import numpy as np
+import base64
+import os
 
 # ==========================================
 # 1. Page Configuration & Setup
 # ==========================================
 # Must be the first Streamlit command
-st.set_page_config(page_title="NextGen Sports Lab", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="NextGen Sports Lab", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
 # Securely fetch the API key from Streamlit Secrets
 API_KEY = st.secrets.get("GEMINI_API_KEY")
@@ -18,8 +20,8 @@ if not API_KEY:
     Your **Gemini API Key is missing**. The AI Coach cannot operate without it.
     
     ### How to solve this immediately:
-    1.  If you are running this on Streamlit Cloud, go to your dashboard, click the **three vertical dots (⋮)** next to this app, and select **Settings** -> **Secrets**.
-    2.  Paste exactly this and click Save (keeping the quotation marks!):
+    1.  Go to your Streamlit Cloud dashboard, click the **three vertical dots (⋮)** next to this app, and select **Settings** -> **Secrets**.
+    2.  Paste exactly this and click Save:
         ```toml
         GEMINI_API_KEY = "your-actual-api-key-from-google"
         ```
@@ -39,7 +41,7 @@ if 'workout_calendar' not in st.session_state: st.session_state.workout_calendar
 if 'help_response' not in st.session_state: st.session_state.help_response = None
 if 'quick_prompts_list' not in st.session_state: st.session_state.quick_prompts_list = []
 
-# Remember sidebar inputs
+# Remember profile inputs
 for key in ['sport', 'position', 'injuries', 'prefs', 'nutrition', 'calories', 'goal']:
     if key not in st.session_state:
         st.session_state[key] = ""
@@ -66,7 +68,6 @@ def get_temperature(feature_name):
 def generate_diet_plan(sport, position, goal, nutrition, calories):
     try:
         prompt = f"Athlete: {sport}, {position}. Goal: {goal}. Diet: {nutrition}. Calories: {calories}.\nProvide a highly structured, week-long sports nutrition guide respecting these exact dietary needs. Format with clean markdown."
-        # UPDATED TO 2.5
         model = genai.GenerativeModel("gemini-2.5-flash", system_instruction="Safety-conscious, high-performance sports nutritionist.")
         response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=0.3))
         return response.text
@@ -78,7 +79,6 @@ def generate_quick_prompts(sport):
     try:
         sport_context = sport if sport else "general fitness"
         prompt = f"Write exactly 4 short, highly specific, single-sentence prompt suggestions that a {sport_context} player would ask an AI sports coach. Separate each prompt with a pipe character '|'."
-        # UPDATED TO 2.5
         model = genai.GenerativeModel("gemini-2.5-flash")
         response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=0.8))
         prompts = [p.strip() for p in response.text.split('|') if p.strip()]
@@ -89,7 +89,6 @@ def generate_quick_prompts(sport):
 def generate_calendar(sport, position, goal):
     try:
         prompt = f"Structure a 7-day high-level workout calendar for a {sport} player ({position}) focusing on {goal}. Provide a markdown table with columns: Day (Mon-Sun), Core Workout, Sport-Specific Drill, Nutrition Note. Include necessary rest days."
-        # UPDATED TO 2.5
         model = genai.GenerativeModel("gemini-2.5-flash", system_instruction="Professional sports coach scheduling safe training weeks.")
         response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=0.3))
         return response.text
@@ -99,7 +98,6 @@ def generate_calendar(sport, position, goal):
 def generate_help(query, sport):
     try:
         prompt = f"Provide immediate, step-by-step first aid or safety tips for handling the problem: '{query}' in the context of {sport}. State clearly you are not a doctor. List red-flag symptoms requiring a 911 call. Format with clear bullet points."
-        # UPDATED TO 2.5
         model = genai.GenerativeModel("gemini-2.5-flash", system_instruction="Strict, precise, safety-first sports first-aid guide.")
         response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=0.1))
         return response.text
@@ -110,7 +108,6 @@ def process_chat(user_msg):
     st.session_state.chat_history.append({"role": "user", "text": user_msg})
     
     ctx = f"Athlete Profile: {st.session_state.sport} ({st.session_state.position}). Goal: {st.session_state.goal}. Injuries: {st.session_state.injuries}."
-    # UPDATED TO 2.5
     model = genai.GenerativeModel("gemini-2.5-flash", system_instruction="You are a brief, encouraging, and highly professional sports coach. Prioritize safe form and actionable advice.")
     
     full_prompt = f"{ctx}\n\nUser: {user_msg}"
@@ -119,11 +116,23 @@ def process_chat(user_msg):
     st.session_state.chat_history.append({"role": "coach", "text": response.text})
 
 # ==========================================
-# 3. CSS Injection: The B&W "Glass OS"
+# 3. CSS Injection & Background Image Handler
 # ==========================================
-BG_IMAGE = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop"
 
-def inject_custom_css(is_outdoor_mode):
+# Function to safely load the local background image you attached
+@st.cache_data
+def get_base64_of_bin_file(bin_file):
+    try:
+        with open(bin_file, 'rb') as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except FileNotFoundError:
+        return None
+
+# Name your uploaded image 'background.jpg' and put it in the same folder as app.py
+img_base64 = get_base64_of_bin_file('background.jpg') 
+
+def inject_custom_css(is_outdoor_mode, img_b64):
     if is_outdoor_mode:
         card_bg = "rgba(10, 10, 10, 0.95)"
         border = "2px solid #FFFFFF"
@@ -135,7 +144,13 @@ def inject_custom_css(is_outdoor_mode):
         border = "1px solid rgba(255, 255, 255, 0.2)"
         blur = "blur(16px)"
         text_shadow = "0 2px 10px rgba(0,0,0,0.8)"
-        bg_css = f"background-image: url('{BG_IMAGE}'); background-size: cover; background-attachment: fixed; background-position: center;"
+        
+        # Use local image if available, otherwise fallback to web image
+        if img_b64:
+            bg_css = f"background-image: url('data:image/jpeg;base64,{img_b64}'); background-size: cover; background-attachment: fixed; background-position: center;"
+        else:
+            fallback_img = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop"
+            bg_css = f"background-image: url('{fallback_img}'); background-size: cover; background-attachment: fixed; background-position: center;"
 
     css = f"""
     <style>
@@ -164,7 +179,7 @@ def inject_custom_css(is_outdoor_mode):
             font-size: 1.1rem !important;
         }}
 
-        /* Buttons */
+        /* Action Buttons */
         .stButton button {{
             background-color: rgba(0, 0, 0, 0.4) !important;
             border: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -172,27 +187,45 @@ def inject_custom_css(is_outdoor_mode):
             color: #FFFFFF !important;
             transition: all 0.2s;
             width: 100%;
-            height: 100%;
-            text-align: left;
-            padding: 15px !important;
         }}
         .stButton button:hover {{
             background-color: rgba(255, 255, 255, 0.15) !important;
             border-color: #FFFFFF !important;
         }}
 
-        /* Tabs */
-        button[data-baseweb="tab"] {{
-            background-color: rgba(0,0,0,0.4) !important;
-            color: white !important;
-            border-radius: 10px 10px 0 0 !important;
-            border: 1px solid rgba(255,255,255,0.1) !important;
-            margin-right: 5px;
+        /* Sidebar Vertical Navigation Menu CSS */
+        section[data-testid="stSidebar"] {{
+            background-color: rgba(0, 0, 0, 0.7) !important;
+            backdrop-filter: blur(20px) !important;
+            border-right: 1px solid rgba(255,255,255,0.1);
         }}
-        button[data-baseweb="tab"][aria-selected="true"] {{
-            background-color: rgba(255, 255, 255, 0.15) !important;
-            border-bottom: 2px solid #FFFFFF !important;
-            color: #FFFFFF !important;
+        
+        /* Hide default radio circles in sidebar */
+        div[role="radiogroup"] > label > div:first-child {{ display: none; }}
+        
+        /* Style radio buttons as vertical tabs */
+        div[role="radiogroup"] > label {{
+            background: rgba(255,255,255,0.05);
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: 0.3s;
+            cursor: pointer;
+            width: 100%;
+        }}
+        div[role="radiogroup"] > label:hover {{
+            background: rgba(255,255,255,0.15);
+        }}
+        div[role="radiogroup"] > label[data-checked="true"] {{
+            background: rgba(255,255,255,0.2);
+            border-left: 5px solid #FFFFFF;
+        }}
+        div[role="radiogroup"] p {{
+            font-size: 1.1rem !important;
+            font-weight: bold;
+            color: white;
+            margin: 0;
         }}
 
         /* Chat bubbles */
@@ -203,7 +236,7 @@ def inject_custom_css(is_outdoor_mode):
     st.markdown(css, unsafe_allow_html=True)
 
 # ==========================================
-# 4. User Interface Layout
+# 4. Global Header
 # ==========================================
 col_logo, col_toggle = st.columns([4, 1])
 with col_logo:
@@ -211,31 +244,30 @@ with col_logo:
 with col_toggle:
     st.session_state.outdoor_mode = st.toggle("☀️ Outdoor Mode", value=st.session_state.outdoor_mode)
 
-inject_custom_css(st.session_state.outdoor_mode)
+inject_custom_css(st.session_state.outdoor_mode, img_base64)
 
-# --- SIDEBAR (Profile Form) ---
-st.sidebar.markdown("<h2 style='color: white;'>📋 Athlete Profile</h2>", unsafe_allow_html=True)
-with st.sidebar.form("profile_form"):
-    st.session_state.sport = st.text_input("Sport", value=st.session_state.sport, placeholder="e.g., Basketball")
-    st.session_state.position = st.text_input("Position", value=st.session_state.position, placeholder="e.g., Point Guard")
-    st.session_state.injuries = st.text_input("Injuries / Risks", value=st.session_state.injuries)
-    st.session_state.prefs = st.text_input("Training Prefs", value=st.session_state.prefs)
-    st.session_state.nutrition = st.text_input("Diet (Veg/Allergies)", value=st.session_state.nutrition)
-    st.session_state.calories = st.text_input("Calorie Goal", value=st.session_state.calories)
-    st.session_state.goal = st.text_input("Primary Goal", value=st.session_state.goal)
-    st.form_submit_button("Save Profile Data")
+# ==========================================
+# 5. Sidebar - Vertical Navigation Menu
+# ==========================================
+st.sidebar.markdown("<br><h2 style='color: white; text-align: center; letter-spacing: 2px;'>SYSTEM MENU</h2><br>", unsafe_allow_html=True)
 
-# --- MAIN TABS ---
-tab1, tab2, tab3, tab4 = st.tabs(["💬 AI Coach", "🤖 Playbook & Diet", "📅 Calendar", "⚠️ Help"])
+# The Vertical Left-Aligned Navigation Bar
+selected_tab = st.sidebar.radio(
+    "Navigation",
+    ["💬 AI Coach", "📋 Athlete Profile", "🤖 Playbook & Diet", "📅 Calendar", "⚠️ Help & First Aid"],
+    label_visibility="collapsed"
+)
+
+# ==========================================
+# 6. Content Views based on Vertical Nav
+# ==========================================
 
 # ------------------------------------------
-# TAB 1: Chatbot & Home Interface
+# VIEW 1: Chatbot & Home Interface
 # ------------------------------------------
-with tab1:
-    st.markdown("<br>", unsafe_allow_html=True)
-    
+if selected_tab == "💬 AI Coach":
     if len(st.session_state.chat_history) == 0:
-        st.markdown("<h2 style='text-align: center; color: white; margin-bottom: 30px;'>What are we training today?</h2>", unsafe_allow_html=True)
+        st.markdown("<br><h2 style='text-align: center; color: white; margin-bottom: 30px;'>What are we training today?</h2>", unsafe_allow_html=True)
         
         with st.form("home_search_form", clear_on_submit=True):
             col_search, col_send = st.columns([6, 1])
@@ -254,15 +286,11 @@ with tab1:
         
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            if st.button(prompts[0], key="p1"): 
-                process_chat(prompts[0]); st.rerun()
-            if st.button(prompts[1], key="p2"): 
-                process_chat(prompts[1]); st.rerun()
+            if st.button(prompts[0], key="p1"): process_chat(prompts[0]); st.rerun()
+            if st.button(prompts[1], key="p2"): process_chat(prompts[1]); st.rerun()
         with col_p2:
-            if st.button(prompts[2], key="p3"): 
-                process_chat(prompts[2]); st.rerun()
-            if len(prompts) > 3 and st.button(prompts[3], key="p4"): 
-                process_chat(prompts[3]); st.rerun()
+            if st.button(prompts[2], key="p3"): process_chat(prompts[2]); st.rerun()
+            if len(prompts) > 3 and st.button(prompts[3], key="p4"): process_chat(prompts[3]); st.rerun()
 
     else:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
@@ -284,9 +312,34 @@ with tab1:
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------
-# TAB 2: Playbook & Diet
+# VIEW 2: Athlete Profile Form (Moved from slider)
 # ------------------------------------------
-with tab2:
+elif selected_tab == "📋 Athlete Profile":
+    st.markdown("<br><div class='glass-card'>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#FFFFFF; text-align: center;'>📋 Setup Athlete Profile</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #ccc;'>CoachBot uses this data to generate personalized, safe playbooks.</p><hr>", unsafe_allow_html=True)
+    
+    with st.form("profile_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.session_state.sport = st.text_input("Sport", value=st.session_state.sport, placeholder="e.g., Basketball")
+            st.session_state.injuries = st.text_input("Injuries / Risks", value=st.session_state.injuries, placeholder="e.g., Weak right ankle")
+            st.session_state.nutrition = st.text_input("Diet (Veg/Allergies)", value=st.session_state.nutrition, placeholder="e.g., Vegan")
+            st.session_state.goal = st.text_input("Primary Goal", value=st.session_state.goal, placeholder="e.g., Increase vertical jump")
+        with col2:
+            st.session_state.position = st.text_input("Position", value=st.session_state.position, placeholder="e.g., Point Guard")
+            st.session_state.prefs = st.text_input("Training Prefs", value=st.session_state.prefs, placeholder="e.g., Prefers bodyweight")
+            st.session_state.calories = st.text_input("Calorie Goal", value=st.session_state.calories, placeholder="e.g., 2800 kcal")
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.form_submit_button("Save Profile Data ✔️", use_container_width=True):
+            st.success("✅ Profile Data Saved. CoachBot is calibrated.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ------------------------------------------
+# VIEW 3: Playbook & Diet
+# ------------------------------------------
+elif selected_tab == "🤖 Playbook & Diet":
     st.markdown("<br>", unsafe_allow_html=True)
     c_play, c_diet = st.columns(2)
     
@@ -299,13 +352,12 @@ with tab2:
                 with st.spinner("Drafting Playbook..."):
                     ctx = f"Sport: {st.session_state.sport}, Pos: {st.session_state.position}, Injuries: {st.session_state.injuries}, Goal: {st.session_state.goal}"
                     prompt = f"{ctx}\n\nTask: {FEATURES[selected_feature]}"
-                    # UPDATED TO 2.5
                     model = genai.GenerativeModel("gemini-2.5-flash", system_instruction="Encouraging, safety-conscious professional coach.")
                     res = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=get_temperature(selected_feature)))
                     st.session_state.ai_plan = res.text
                     st.session_state.current_feature = selected_feature
             else:
-                st.error("Sport required in sidebar!")
+                st.error("⚠️ Sport required! Go to 'Athlete Profile' first.")
                 
         if st.session_state.ai_plan:
             st.markdown("---")
@@ -316,7 +368,7 @@ with tab2:
     with c_diet:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         st.markdown("<h3 style='color:#FFFFFF;'>🥦 Diet Plan</h3>", unsafe_allow_html=True)
-        if st.button("Generate Diet Plan🍽️"):
+        if st.button("Generate Diet Plan 🍽️"):
             if st.session_state.sport and st.session_state.nutrition:
                 with st.spinner("Cooking up your diet plan..."):
                     st.session_state.diet_plan = generate_diet_plan(
@@ -324,7 +376,7 @@ with tab2:
                         st.session_state.nutrition, st.session_state.calories
                     )
             else:
-                st.warning("Ensure Sport and Diet fields are filled in the sidebar.")
+                st.warning("⚠️ Ensure Sport and Diet fields are filled in the 'Athlete Profile' tab.")
         
         if st.session_state.diet_plan:
             st.markdown("---")
@@ -332,34 +384,84 @@ with tab2:
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------
-# TAB 3: Calendar
+# VIEW 4: Calendar
 # ------------------------------------------
-with tab3:
+elif selected_tab == "📅 Calendar":
     st.markdown("<br><div class='glass-card'><h3 style='color:#FFFFFF;'>📅 Weekly Calendar</h3>", unsafe_allow_html=True)
-    if st.button("Generate Weekly Calendar🗓️"):
+    if st.button("Generate Weekly Calendar 🗓️"):
         if st.session_state.sport:
             with st.spinner("Scheduling..."):
                 st.session_state.workout_calendar = generate_calendar(st.session_state.sport, st.session_state.position, st.session_state.goal)
         else:
-            st.warning("Sport required in sidebar.")
+            st.warning("⚠️ Sport required in the 'Athlete Profile' tab.")
             
     if st.session_state.workout_calendar:
         st.markdown(st.session_state.workout_calendar)
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------
-# TAB 4: Help & Emergency
+# VIEW 5: Help & Emergency
 # ------------------------------------------
-with tab4:
-    st.markdown("<br><div class='glass-card'><h3 style='color:#FFFFFF;'>⚠️ Help & First Aid</h3>", unsafe_allow_html=True)
-    help_query = st.text_input("What happened?", placeholder="e.g. Rolled ankle, Dehydration symptoms")
-    if st.button("Get Safe Guidance"):
+elif selected_tab == "⚠️ Help & First Aid":
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Pre-made Emergency Protocols Row
+    st.markdown("<h3 style='color:#FFFFFF;'>💎 Pre-Made Emergency Protocols</h3>", unsafe_allow_html=True)
+    col_em1, col_em2 = st.columns(2)
+    
+    with col_em1:
+        with st.expander("⚠️ Ankle/Joint Sprain (R.I.C.E.)"):
+            st.markdown("""
+            **1. Rest:** Stop activity immediately. Do not put weight on it.
+            **2. Ice:** Apply ice for 15-20 minutes every 2-3 hours.
+            **3. Compress:** Wrap with an elastic bandage (not too tight).
+            **4. Elevate:** Keep the injured area above the heart to reduce swelling.
+            """)
+        with st.expander("⚠️ Heat Exhaustion"):
+            st.markdown("""
+            **Symptoms:** Heavy sweating, cold/pale skin, nausea, dizziness.
+            **Action:** - Move to a cool/shaded area immediately.
+            - Lie down and elevate legs.
+            - Sip cool water or sports drink slowly.
+            - Apply cool, wet cloths to the body.
+            *Call 911 if vomiting occurs or symptoms worsen after 1 hour.*
+            """)
+            
+    with col_em2:
+        with st.expander("⚠️ Concussion Assessment"):
+            st.markdown("""
+            **Red Flags (Call 911):** Loss of consciousness, vomiting, uneven pupils, worsening headache.
+            **Action:**
+            - Stop play immediately. Do not return to the game.
+            - Keep the athlete calm and still.
+            - Ask basic questions (What quarter is it? Who scored last?) to check memory.
+            - Have a medical professional clear the athlete before any physical activity.
+            """)
+        with st.expander("⚠️ Severe Bleeding"):
+            st.markdown("""
+            **Action:**
+            - Apply immediate, firm, direct pressure with a clean cloth or gauze.
+            - Maintain pressure without lifting the cloth to check.
+            - If blood soaks through, add more cloth on top (do not remove the original).
+            - Elevate the injured area above the heart if possible.
+            *Call 911 if bleeding does not stop after 10 minutes of pressure.*
+            """)
+
+    # Dynamic AI First Aid Generator
+    st.markdown("<br><div class='glass-card'>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color:#FFFFFF;'>🔍 Search Custom Guidance</h3>", unsafe_allow_html=True)
+    help_query = st.text_input("Describe the injury or situation:", placeholder="e.g. Dislocated shoulder, Cramp in hamstring")
+    
+    if st.button("Generate Safe Guidance 🏥"):
         if help_query and st.session_state.sport:
             with st.spinner("Finding safety protocols..."):
                 st.session_state.help_response = generate_help(help_query, st.session_state.sport)
+        elif not st.session_state.sport:
+            st.warning("⚠️ Enter your sport in the 'Athlete Profile' tab for sport-specific advice.")
         else:
-            st.warning("Enter a query and ensure your sport is in the sidebar.")
+            st.warning("⚠️ Enter a query to search.")
             
     if st.session_state.help_response:
+        st.markdown("---")
         st.markdown(st.session_state.help_response)
     st.markdown("</div>", unsafe_allow_html=True)

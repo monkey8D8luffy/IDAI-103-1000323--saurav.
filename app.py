@@ -125,27 +125,36 @@ def handle_prompt_click(prompt_text):
     process_chat(prompt_text)
 
 # ==========================================
-# 3. CSS Injection & Background Image
+# 3. CSS Injection & Smart Background Image Loader
 # ==========================================
 @st.cache_data
-def get_base64_of_bin_file(bin_file):
+def get_absolute_local_bg():
     try:
-        with open(bin_file, 'rb') as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    except FileNotFoundError:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        # Actively hunts for ANY image format to bypass renaming errors
+        possible_filenames = ['background.jpg', 'background.png', 'background.jpg.png']
+        
+        for filename in possible_filenames:
+            file_path = os.path.join(current_dir, filename)
+            if os.path.exists(file_path):
+                with open(file_path, 'rb') as f:
+                    data = f.read()
+                # Dynamically set mime type
+                mime = "image/png" if "png" in filename.lower() else "image/jpeg"
+                return f"url('data:{mime};base64,{base64.b64encode(data).decode()}')"
+        return None
+    except Exception as e:
         return None
 
-# Looking for your specific B&W Gym Image
-img_base64 = get_base64_of_bin_file('background.jpg') 
+img_bg_css = get_absolute_local_bg() 
 
-def inject_custom_css(is_outdoor_mode, img_b64):
+def inject_custom_css(is_outdoor_mode, img_url_css):
     if is_outdoor_mode:
         card_bg = "rgba(10, 10, 10, 0.98)"
         border = "2px solid #FFFFFF"
         blur = "blur(0px)"
         text_shadow = "none"
-        bg_css = "background-color: #000000;"
+        bg_css = "background-color: #000000 !important;"
     else:
         # High-opacity cards to stand out clearly against the B&W background
         card_bg = "rgba(15, 15, 15, 0.75)"
@@ -153,16 +162,23 @@ def inject_custom_css(is_outdoor_mode, img_b64):
         blur = "blur(24px)"
         text_shadow = "0 2px 10px rgba(0,0,0,0.9)"
         
-        if img_b64:
-            bg_css = f"background-image: url('data:image/jpeg;base64,{img_b64}'); background-size: cover; background-attachment: fixed; background-position: center;"
+        if img_url_css:
+            bg_css = f"background-image: {img_url_css} !important; background-size: cover !important; background-attachment: fixed !important; background-position: center !important;"
         else:
-            # High-contrast monotone fallback if local image isn't found
             fallback_img = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop&grayscale"
-            bg_css = f"background-image: url('{fallback_img}'); background-size: cover; background-attachment: fixed; background-position: center;"
+            bg_css = f"background-image: url('{fallback_img}') !important; background-size: cover !important; background-attachment: fixed !important; background-position: center !important;"
 
     css = f"""
     <style>
-        .stApp {{ {bg_css} }}
+        /* BULLETPROOF BACKGROUND INJECTION */
+        [data-testid="stAppViewContainer"] {{
+            {bg_css}
+        }}
+        
+        /* Force Streamlit Header to be transparent so it doesn't block the image */
+        [data-testid="stHeader"] {{
+            background-color: rgba(0, 0, 0, 0) !important;
+        }}
         
         /* Adjust layout to match the mockup grid */
         .main .block-container {{
@@ -288,7 +304,7 @@ with col_logo:
 with col_toggle:
     st.session_state.outdoor_mode = st.toggle("☀️ Outdoor Mode", value=st.session_state.outdoor_mode)
 
-inject_custom_css(st.session_state.outdoor_mode, img_base64)
+inject_custom_css(st.session_state.outdoor_mode, img_bg_css)
 
 # ==========================================
 # 5. Fixed Vertical "Floating Pill" Navbar
@@ -305,9 +321,6 @@ selected_tab = st.sidebar.radio(
 # 6. Content Views
 # ==========================================
 
-# ------------------------------------------
-# VIEW 1: Chatbot & Home Interface
-# ------------------------------------------
 if selected_tab == "💬 AI Coach":
     if len(st.session_state.chat_history) == 0:
         st.markdown("<br><h2 style='text-align: center; color: white; margin-bottom: 30px; text-shadow: 0 4px 10px #000;'>What are we training today?</h2>", unsafe_allow_html=True)
@@ -354,9 +367,6 @@ if selected_tab == "💬 AI Coach":
                 st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ------------------------------------------
-# VIEW 2: Athlete Profile Form
-# ------------------------------------------
 elif selected_tab == "📋 Athlete Profile":
     st.markdown("<br><div class='glass-card'>", unsafe_allow_html=True)
     st.markdown("<h2 style='color:#FFFFFF; text-align: center;'>📋 Setup Athlete Profile</h2>", unsafe_allow_html=True)
@@ -379,9 +389,6 @@ elif selected_tab == "📋 Athlete Profile":
             st.success("✅ Profile Data Saved. CoachBot is calibrated.")
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ------------------------------------------
-# VIEW 3: Playbook & Diet
-# ------------------------------------------
 elif selected_tab == "🤖 Playbook & Diet":
     st.markdown("<br>", unsafe_allow_html=True)
     c_play, c_diet = st.columns(2)
@@ -426,9 +433,6 @@ elif selected_tab == "🤖 Playbook & Diet":
             st.markdown(st.session_state.diet_plan)
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ------------------------------------------
-# VIEW 4: Calendar
-# ------------------------------------------
 elif selected_tab == "📅 Calendar":
     st.markdown("<br><div class='glass-card'><h3 style='color:#FFFFFF;'>📅 Weekly Calendar</h3>", unsafe_allow_html=True)
     if st.button("Generate Weekly Calendar 🗓️"):
@@ -442,9 +446,6 @@ elif selected_tab == "📅 Calendar":
         st.markdown(st.session_state.workout_calendar)
     st.markdown("</div>", unsafe_allow_html=True)
 
-# ------------------------------------------
-# VIEW 5: Help & Emergency
-# ------------------------------------------
 elif selected_tab == "⚠️ Help & First Aid":
     st.markdown("<br>", unsafe_allow_html=True)
     

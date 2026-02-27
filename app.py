@@ -8,10 +8,8 @@ import os
 # ==========================================
 # 1. Page Configuration & Setup
 # ==========================================
-# Must be the first Streamlit command
 st.set_page_config(page_title="NextGen Sports Lab", page_icon="⚡", layout="wide", initial_sidebar_state="expanded")
 
-# Securely fetch the API key from Streamlit Secrets
 API_KEY = st.secrets.get("GEMINI_API_KEY")
 
 if not API_KEY:
@@ -31,7 +29,7 @@ if not API_KEY:
 
 genai.configure(api_key=API_KEY)
 
-# Initialize Session States to remember user data across interactions
+# Initialize Session States
 if 'outdoor_mode' not in st.session_state: st.session_state.outdoor_mode = False
 if 'ai_plan' not in st.session_state: st.session_state.ai_plan = None
 if 'current_feature' not in st.session_state: st.session_state.current_feature = None
@@ -39,9 +37,7 @@ if 'diet_plan' not in st.session_state: st.session_state.diet_plan = None
 if 'chat_history' not in st.session_state: st.session_state.chat_history = []
 if 'workout_calendar' not in st.session_state: st.session_state.workout_calendar = None
 if 'help_response' not in st.session_state: st.session_state.help_response = None
-if 'quick_prompts_list' not in st.session_state: st.session_state.quick_prompts_list = []
 
-# Remember profile inputs
 for key in ['sport', 'position', 'injuries', 'prefs', 'nutrition', 'calories', 'goal']:
     if key not in st.session_state:
         st.session_state[key] = ""
@@ -76,15 +72,26 @@ def generate_diet_plan(sport, position, goal, nutrition, calories):
 
 @st.cache_data(show_spinner=False)
 def generate_quick_prompts(sport):
+    # Bulletproof defaults in case the AI drops a connection
+    defaults = [
+        "Design a 20-minute HIIT warm-up.", 
+        "How can I improve my reaction time?", 
+        "Give me a post-workout recovery routine.", 
+        "What should I eat before a big match?"
+    ]
     try:
         sport_context = sport if sport else "general fitness"
-        prompt = f"Write exactly 4 short, highly specific, single-sentence prompt suggestions that a {sport_context} player would ask an AI sports coach. Separate each prompt with a pipe character '|'."
+        prompt = f"Write exactly 4 short, highly specific, single-sentence prompt suggestions that a {sport_context} player would ask an AI sports coach. Separate each prompt with a pipe character '|'. No numbers."
         model = genai.GenerativeModel("gemini-2.5-flash")
         response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=0.8))
         prompts = [p.strip() for p in response.text.split('|') if p.strip()]
+        
+        # Fill any missing spots with defaults so buttons never break
+        while len(prompts) < 4:
+            prompts.append(defaults[len(prompts)])
         return prompts[:4] 
     except:
-        return ["Design a 20-minute HIIT warm-up.", "How can I improve my reaction time?", "Give me a post-workout recovery routine.", "What should I eat before a big match?"]
+        return defaults
 
 def generate_calendar(sport, position, goal):
     try:
@@ -105,21 +112,24 @@ def generate_help(query, sport):
         return f"🚨 API Error: {str(e)}"
 
 def process_chat(user_msg):
+    # Add user message instantly
     st.session_state.chat_history.append({"role": "user", "text": user_msg})
     
-    ctx = f"Athlete Profile: {st.session_state.sport} ({st.session_state.position}). Goal: {st.session_state.goal}. Injuries: {st.session_state.injuries}."
-    model = genai.GenerativeModel("gemini-2.5-flash", system_instruction="You are a brief, encouraging, and highly professional sports coach. Prioritize safe form and actionable advice.")
-    
-    full_prompt = f"{ctx}\n\nUser: {user_msg}"
-    response = model.generate_content(full_prompt)
-    
-    st.session_state.chat_history.append({"role": "coach", "text": response.text})
+    # Try contacting the AI, show error inside chat if it fails
+    try:
+        ctx = f"Athlete Profile: {st.session_state.sport} ({st.session_state.position}). Goal: {st.session_state.goal}. Injuries: {st.session_state.injuries}."
+        model = genai.GenerativeModel("gemini-2.5-flash", system_instruction="You are a brief, encouraging, and highly professional sports coach. Prioritize safe form and actionable advice.")
+        
+        full_prompt = f"{ctx}\n\nUser: {user_msg}"
+        response = model.generate_content(full_prompt)
+        
+        st.session_state.chat_history.append({"role": "coach", "text": response.text})
+    except Exception as e:
+        st.session_state.chat_history.append({"role": "coach", "text": f"🚨 Connection Error: Unable to reach the playbook database. ({str(e)})"})
 
 # ==========================================
 # 3. CSS Injection & Background Image Handler
 # ==========================================
-
-# Function to safely load the local background image you attached
 @st.cache_data
 def get_base64_of_bin_file(bin_file):
     try:
@@ -129,7 +139,7 @@ def get_base64_of_bin_file(bin_file):
     except FileNotFoundError:
         return None
 
-# Name your uploaded image 'background.jpg' and put it in the same folder as app.py
+# Ensure your local image is named exactly 'background.jpg'
 img_base64 = get_base64_of_bin_file('background.jpg') 
 
 def inject_custom_css(is_outdoor_mode, img_b64):
@@ -145,10 +155,10 @@ def inject_custom_css(is_outdoor_mode, img_b64):
         blur = "blur(16px)"
         text_shadow = "0 2px 10px rgba(0,0,0,0.8)"
         
-        # Use local image if available, otherwise fallback to web image
         if img_b64:
             bg_css = f"background-image: url('data:image/jpeg;base64,{img_b64}'); background-size: cover; background-attachment: fixed; background-position: center;"
         else:
+            # Fallback to a Black & White concrete gym image
             fallback_img = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop"
             bg_css = f"background-image: url('{fallback_img}'); background-size: cover; background-attachment: fixed; background-position: center;"
 
@@ -251,7 +261,6 @@ inject_custom_css(st.session_state.outdoor_mode, img_base64)
 # ==========================================
 st.sidebar.markdown("<br><h2 style='color: white; text-align: center; letter-spacing: 2px;'>SYSTEM MENU</h2><br>", unsafe_allow_html=True)
 
-# The Vertical Left-Aligned Navigation Bar
 selected_tab = st.sidebar.radio(
     "Navigation",
     ["💬 AI Coach", "📋 Athlete Profile", "🤖 Playbook & Diet", "📅 Calendar", "⚠️ Help & First Aid"],
@@ -277,20 +286,28 @@ if selected_tab == "💬 AI Coach":
                 submitted = st.form_submit_button("Send 哨", use_container_width=True)
             
             if submitted and user_msg:
-                with st.spinner("Analyzing..."):
+                with st.spinner("Analyzing your request..."):
                     process_chat(user_msg)
                 st.rerun()
 
         st.markdown("<br><p style='text-align: center; color: #ccc;'>💡 <b>NextGen Prompts</b></p>", unsafe_allow_html=True)
         prompts = generate_quick_prompts(st.session_state.sport)
         
+        # Track button clicks properly so the UI doesn't freeze
+        clicked_prompt = None
+
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            if st.button(prompts[0], key="p1"): process_chat(prompts[0]); st.rerun()
-            if st.button(prompts[1], key="p2"): process_chat(prompts[1]); st.rerun()
+            if st.button(prompts[0], key="p1"): clicked_prompt = prompts[0]
+            if st.button(prompts[1], key="p2"): clicked_prompt = prompts[1]
         with col_p2:
-            if st.button(prompts[2], key="p3"): process_chat(prompts[2]); st.rerun()
-            if len(prompts) > 3 and st.button(prompts[3], key="p4"): process_chat(prompts[3]); st.rerun()
+            if st.button(prompts[2], key="p3"): clicked_prompt = prompts[2]
+            if st.button(prompts[3], key="p4"): clicked_prompt = prompts[3]
+
+        if clicked_prompt:
+            with st.spinner("Coach is analyzing your request..."):
+                process_chat(clicked_prompt)
+            st.rerun()
 
     else:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
@@ -312,7 +329,7 @@ if selected_tab == "💬 AI Coach":
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------------------
-# VIEW 2: Athlete Profile Form (Moved from slider)
+# VIEW 2: Athlete Profile Form
 # ------------------------------------------
 elif selected_tab == "📋 Athlete Profile":
     st.markdown("<br><div class='glass-card'>", unsafe_allow_html=True)
@@ -405,7 +422,6 @@ elif selected_tab == "📅 Calendar":
 elif selected_tab == "⚠️ Help & First Aid":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Pre-made Emergency Protocols Row
     st.markdown("<h3 style='color:#FFFFFF;'>💎 Pre-Made Emergency Protocols</h3>", unsafe_allow_html=True)
     col_em1, col_em2 = st.columns(2)
     
@@ -447,7 +463,6 @@ elif selected_tab == "⚠️ Help & First Aid":
             *Call 911 if bleeding does not stop after 10 minutes of pressure.*
             """)
 
-    # Dynamic AI First Aid Generator
     st.markdown("<br><div class='glass-card'>", unsafe_allow_html=True)
     st.markdown("<h3 style='color:#FFFFFF;'>🔍 Search Custom Guidance</h3>", unsafe_allow_html=True)
     help_query = st.text_input("Describe the injury or situation:", placeholder="e.g. Dislocated shoulder, Cramp in hamstring")

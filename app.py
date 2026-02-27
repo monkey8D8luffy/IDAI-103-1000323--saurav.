@@ -2,8 +2,6 @@ import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import numpy as np
-import base64
-import os
 
 # ==========================================
 # 1. Page Configuration & Setup
@@ -72,7 +70,6 @@ def generate_diet_plan(sport, position, goal, nutrition, calories):
 
 @st.cache_data(show_spinner=False)
 def generate_quick_prompts(sport):
-    # Bulletproof defaults in case the AI drops a connection
     defaults = [
         "Design a 20-minute HIIT warm-up.", 
         "How can I improve my reaction time?", 
@@ -86,7 +83,6 @@ def generate_quick_prompts(sport):
         response = model.generate_content(prompt, generation_config=genai.types.GenerationConfig(temperature=0.8))
         prompts = [p.strip() for p in response.text.split('|') if p.strip()]
         
-        # Fill any missing spots with defaults so buttons never break
         while len(prompts) < 4:
             prompts.append(defaults[len(prompts)])
         return prompts[:4] 
@@ -112,37 +108,28 @@ def generate_help(query, sport):
         return f"🚨 API Error: {str(e)}"
 
 def process_chat(user_msg):
-    # Add user message instantly
     st.session_state.chat_history.append({"role": "user", "text": user_msg})
-    
-    # Try contacting the AI, show error inside chat if it fails
     try:
         ctx = f"Athlete Profile: {st.session_state.sport} ({st.session_state.position}). Goal: {st.session_state.goal}. Injuries: {st.session_state.injuries}."
         model = genai.GenerativeModel("gemini-2.5-flash", system_instruction="You are a brief, encouraging, and highly professional sports coach. Prioritize safe form and actionable advice.")
         
         full_prompt = f"{ctx}\n\nUser: {user_msg}"
         response = model.generate_content(full_prompt)
-        
         st.session_state.chat_history.append({"role": "coach", "text": response.text})
     except Exception as e:
         st.session_state.chat_history.append({"role": "coach", "text": f"🚨 Connection Error: Unable to reach the playbook database. ({str(e)})"})
 
-# ==========================================
-# 3. CSS Injection & Background Image Handler
-# ==========================================
-@st.cache_data
-def get_base64_of_bin_file(bin_file):
-    try:
-        with open(bin_file, 'rb') as f:
-            data = f.read()
-        return base64.b64encode(data).decode()
-    except FileNotFoundError:
-        return None
+# Bulletproof Callback to guarantee button clicks register instantly
+def handle_prompt_click(prompt_text):
+    process_chat(prompt_text)
 
-# Ensure your local image is named exactly 'background.jpg'
-img_base64 = get_base64_of_bin_file('background.jpg') 
-
-def inject_custom_css(is_outdoor_mode, img_b64):
+# ==========================================
+# 3. CSS Injection & Background Image
+# ==========================================
+def inject_custom_css(is_outdoor_mode):
+    # Force the Black & White concrete gym image URL directly to override caching
+    BW_GYM_URL = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop"
+    
     if is_outdoor_mode:
         card_bg = "rgba(10, 10, 10, 0.95)"
         border = "2px solid #FFFFFF"
@@ -154,13 +141,7 @@ def inject_custom_css(is_outdoor_mode, img_b64):
         border = "1px solid rgba(255, 255, 255, 0.2)"
         blur = "blur(16px)"
         text_shadow = "0 2px 10px rgba(0,0,0,0.8)"
-        
-        if img_b64:
-            bg_css = f"background-image: url('data:image/jpeg;base64,{img_b64}'); background-size: cover; background-attachment: fixed; background-position: center;"
-        else:
-            # Fallback to a Black & White concrete gym image
-            fallback_img = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop"
-            bg_css = f"background-image: url('{fallback_img}'); background-size: cover; background-attachment: fixed; background-position: center;"
+        bg_css = f"background-image: url('{BW_GYM_URL}'); background-size: cover; background-attachment: fixed; background-position: center;"
 
     css = f"""
     <style>
@@ -181,7 +162,7 @@ def inject_custom_css(is_outdoor_mode, img_b64):
 
         /* Inputs */
         .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
-            background-color: rgba(0, 0, 0, 0.4) !important;
+            background-color: rgba(0, 0, 0, 0.6) !important;
             color: white !important;
             border: 1px solid rgba(255,255,255,0.3) !important;
             border-radius: 10px !important;
@@ -189,31 +170,31 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             font-size: 1.1rem !important;
         }}
 
-        /* Action Buttons */
+        /* Action Buttons (Fixed layout issues) */
         .stButton button {{
-            background-color: rgba(0, 0, 0, 0.4) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            background-color: rgba(0, 0, 0, 0.6) !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
             border-radius: 12px !important;
             color: #FFFFFF !important;
             transition: all 0.2s;
-            width: 100%;
+            padding: 15px !important;
+            white-space: normal !important; 
+            height: auto !important; 
         }}
         .stButton button:hover {{
             background-color: rgba(255, 255, 255, 0.15) !important;
             border-color: #FFFFFF !important;
         }}
 
-        /* Sidebar Vertical Navigation Menu CSS */
+        /* Sidebar Vertical Navigation Menu */
         section[data-testid="stSidebar"] {{
-            background-color: rgba(0, 0, 0, 0.7) !important;
+            background-color: rgba(0, 0, 0, 0.8) !important;
             backdrop-filter: blur(20px) !important;
             border-right: 1px solid rgba(255,255,255,0.1);
         }}
         
-        /* Hide default radio circles in sidebar */
         div[role="radiogroup"] > label > div:first-child {{ display: none; }}
         
-        /* Style radio buttons as vertical tabs */
         div[role="radiogroup"] > label {{
             background: rgba(255,255,255,0.05);
             padding: 15px 20px;
@@ -224,19 +205,9 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             cursor: pointer;
             width: 100%;
         }}
-        div[role="radiogroup"] > label:hover {{
-            background: rgba(255,255,255,0.15);
-        }}
-        div[role="radiogroup"] > label[data-checked="true"] {{
-            background: rgba(255,255,255,0.2);
-            border-left: 5px solid #FFFFFF;
-        }}
-        div[role="radiogroup"] p {{
-            font-size: 1.1rem !important;
-            font-weight: bold;
-            color: white;
-            margin: 0;
-        }}
+        div[role="radiogroup"] > label:hover {{ background: rgba(255,255,255,0.15); }}
+        div[role="radiogroup"] > label[data-checked="true"] {{ background: rgba(255,255,255,0.2); border-left: 5px solid #FFFFFF; }}
+        div[role="radiogroup"] p {{ font-size: 1.1rem !important; font-weight: bold; color: white; margin: 0; }}
 
         /* Chat bubbles */
         .chat-user {{ background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 15px 15px 0 15px; margin-bottom: 10px; text-align: right; border: 1px solid rgba(255,255,255,0.2); }}
@@ -254,7 +225,7 @@ with col_logo:
 with col_toggle:
     st.session_state.outdoor_mode = st.toggle("☀️ Outdoor Mode", value=st.session_state.outdoor_mode)
 
-inject_custom_css(st.session_state.outdoor_mode, img_base64)
+inject_custom_css(st.session_state.outdoor_mode)
 
 # ==========================================
 # 5. Sidebar - Vertical Navigation Menu
@@ -268,7 +239,7 @@ selected_tab = st.sidebar.radio(
 )
 
 # ==========================================
-# 6. Content Views based on Vertical Nav
+# 6. Content Views
 # ==========================================
 
 # ------------------------------------------
@@ -293,21 +264,14 @@ if selected_tab == "💬 AI Coach":
         st.markdown("<br><p style='text-align: center; color: #ccc;'>💡 <b>NextGen Prompts</b></p>", unsafe_allow_html=True)
         prompts = generate_quick_prompts(st.session_state.sport)
         
-        # Track button clicks properly so the UI doesn't freeze
-        clicked_prompt = None
-
+        # Bulletproof Callbacks for Quick Prompts
         col_p1, col_p2 = st.columns(2)
         with col_p1:
-            if st.button(prompts[0], key="p1"): clicked_prompt = prompts[0]
-            if st.button(prompts[1], key="p2"): clicked_prompt = prompts[1]
+            st.button(prompts[0], key="p1", on_click=handle_prompt_click, args=(prompts[0],), use_container_width=True)
+            st.button(prompts[1], key="p2", on_click=handle_prompt_click, args=(prompts[1],), use_container_width=True)
         with col_p2:
-            if st.button(prompts[2], key="p3"): clicked_prompt = prompts[2]
-            if st.button(prompts[3], key="p4"): clicked_prompt = prompts[3]
-
-        if clicked_prompt:
-            with st.spinner("Coach is analyzing your request..."):
-                process_chat(clicked_prompt)
-            st.rerun()
+            st.button(prompts[2], key="p3", on_click=handle_prompt_click, args=(prompts[2],), use_container_width=True)
+            st.button(prompts[3], key="p4", on_click=handle_prompt_click, args=(prompts[3],), use_container_width=True)
 
     else:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)

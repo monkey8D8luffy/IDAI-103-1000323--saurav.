@@ -136,6 +136,7 @@ def get_base64_of_bin_file(bin_file):
     except FileNotFoundError:
         return None
 
+# Looking for your specific B&W Gym Image
 img_base64 = get_base64_of_bin_file('background.jpg') 
 
 def inject_custom_css(is_outdoor_mode, img_b64):
@@ -146,73 +147,76 @@ def inject_custom_css(is_outdoor_mode, img_b64):
         text_shadow = "none"
         bg_css = "background-color: #000000;"
     else:
-        # HIGH OPACITY for solid readability against backgrounds
-        card_bg = "rgba(15, 15, 15, 0.85)"
-        border = "1px solid rgba(255, 255, 255, 0.25)"
+        # High-opacity cards to stand out clearly against the B&W background
+        card_bg = "rgba(15, 15, 15, 0.75)"
+        border = "1px solid rgba(255, 255, 255, 0.15)"
         blur = "blur(24px)"
         text_shadow = "0 2px 10px rgba(0,0,0,0.9)"
         
         if img_b64:
             bg_css = f"background-image: url('data:image/jpeg;base64,{img_b64}'); background-size: cover; background-attachment: fixed; background-position: center;"
         else:
-            fallback_img = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop"
+            # High-contrast monotone fallback if local image isn't found
+            fallback_img = "https://images.unsplash.com/photo-1547941126-3d5322b218b0?q=80&w=2000&auto=format&fit=crop&grayscale"
             bg_css = f"background-image: url('{fallback_img}'); background-size: cover; background-attachment: fixed; background-position: center;"
 
     css = f"""
     <style>
         .stApp {{ {bg_css} }}
         
-        /* ADJUST MAIN CONTAINER PADDING TO MATCH MOCK UI */
+        /* Adjust layout to match the mockup grid */
         .main .block-container {{
             padding-top: 2rem !important;
-            padding-left: 1rem !important;
+            padding-left: 2rem !important;
             padding-right: 2rem !important;
             max-width: 100% !important;
         }}
 
-        /* 1. HIDE THE NATIVE SLIDER ARROW */
+        /* HIDE THE NATIVE SLIDER ARROW */
         [data-testid="collapsedControl"] {{ display: none !important; }}
         
-        /* 2. CREATE THE STATIC "FLOATING PILL" SIDEBAR (Matching Mock UI) */
+        /* STATIC MINIMALIST PILL SIDEBAR */
         [data-testid="stSidebar"] {{
             width: 250px !important;
             min-width: 250px !important;
             max-width: 250px !important;
             background-color: transparent !important;
             border-right: none !important;
-            transition: none !important; /* REMOVED HOVER ANIMATION */
         }}
         
         [data-testid="stSidebarUserContent"] {{
-            background-color: rgba(15, 15, 15, 0.85) !important;
+            background-color: rgba(10, 10, 10, 0.8) !important;
             backdrop-filter: blur(24px) !important;
             -webkit-backdrop-filter: blur(24px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
-            border-radius: 24px !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 30px !important; /* Exaggerated pill shape */
             margin: 20px 0px 20px 20px !important;
-            padding: 20px 15px !important;
+            padding: 30px 15px !important;
             height: calc(100vh - 40px) !important;
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6) !important;
         }}
 
-        /* Format Radio Buttons as Minimal Vertical Tabs */
+        /* Format Radio Buttons as Clean Menu Items */
         div[role="radiogroup"] > label > div:first-child {{ display: none; }}
         
         div[role="radiogroup"] > label {{
-            background: rgba(255,255,255,0.05);
-            padding: 15px 15px !important;
+            background: transparent;
+            padding: 12px 15px !important;
             border-radius: 12px;
-            margin-bottom: 12px;
-            border: 1px solid rgba(255,255,255,0.05);
+            margin-bottom: 8px;
+            border: 1px solid transparent;
             transition: 0.3s;
             cursor: pointer;
             width: 100% !important;
             display: flex !important;
             align-items: center !important;
         }}
-        div[role="radiogroup"] > label:hover {{ background: rgba(255,255,255,0.15); }}
-        div[role="radiogroup"] > label[data-checked="true"] {{ background: rgba(255,255,255,0.25); border-left: 4px solid #FFFFFF; }}
-        div[role="radiogroup"] p {{ font-size: 1.05rem !important; font-weight: bold; color: white; margin: 0; padding-left: 5px; }}
+        div[role="radiogroup"] > label:hover {{ background: rgba(255,255,255,0.05); }}
+        div[role="radiogroup"] > label[data-checked="true"] {{ 
+            background: rgba(255,255,255,0.1); 
+            border: 1px solid rgba(255,255,255,0.2);
+        }}
+        div[role="radiogroup"] p {{ font-size: 1.05rem !important; font-weight: 500; color: white; margin: 0; padding-left: 5px; }}
 
         /* Glass Cards */
         .glass-card, div[data-testid="stForm"], div[data-testid="stExpander"] {{
@@ -224,23 +228,23 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             padding: 20px;
             color: white !important;
             text-shadow: {text_shadow};
-            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.7) !important;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
         }}
 
         /* Inputs */
         .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
-            background-color: rgba(10, 10, 10, 0.95) !important; /* Solid dark base */
+            background-color: rgba(0, 0, 0, 0.8) !important;
             color: white !important;
-            border: 1px solid rgba(255,255,255,0.4) !important;
-            border-radius: 10px !important;
+            border: 1px solid rgba(255,255,255,0.2) !important;
+            border-radius: 12px !important;
             padding: 12px !important;
             font-size: 1.1rem !important;
         }}
 
         /* Buttons */
         .stButton button {{
-            background-color: rgba(10, 10, 10, 0.8) !important;
-            border: 1px solid rgba(255, 255, 255, 0.4) !important;
+            background-color: rgba(0, 0, 0, 0.8) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
             border-radius: 12px !important;
             color: #FFFFFF !important;
             transition: all 0.2s;
@@ -249,18 +253,18 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             height: auto !important; 
         }}
         .stButton button:hover {{
-            background-color: rgba(255, 255, 255, 0.15) !important;
+            background-color: rgba(255, 255, 255, 0.1) !important;
             border-color: #FFFFFF !important;
         }}
 
-        /* Highly Opaque Chat Bubbles */
+        /* Chat Bubbles */
         .chat-user {{ 
             background: rgba(40, 40, 40, 0.95); 
             padding: 15px; 
             border-radius: 15px 15px 0 15px; 
             margin-bottom: 10px; 
             text-align: right; 
-            border: 1px solid rgba(255,255,255,0.3); 
+            border: 1px solid rgba(255,255,255,0.2); 
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }}
         .chat-coach {{ 
@@ -268,7 +272,7 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             padding: 15px; 
             border-radius: 15px 15px 15px 0; 
             margin-bottom: 20px; 
-            border: 1px solid rgba(255,255,255,0.2); 
+            border: 1px solid rgba(255,255,255,0.1); 
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }}
     </style>
@@ -280,16 +284,16 @@ def inject_custom_css(is_outdoor_mode, img_b64):
 # ==========================================
 col_logo, col_toggle = st.columns([4, 1])
 with col_logo:
-    st.markdown("<h1 style='color: white; text-shadow: 0 2px 10px #000;'>⚡ NEXTGEN SPORTS LAB</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color: white; text-shadow: 0 2px 10px #000; margin-left: 20px;'>⚡ NEXTGEN SPORTS LAB</h1>", unsafe_allow_html=True)
 with col_toggle:
     st.session_state.outdoor_mode = st.toggle("☀️ Outdoor Mode", value=st.session_state.outdoor_mode)
 
 inject_custom_css(st.session_state.outdoor_mode, img_base64)
 
 # ==========================================
-# 5. Fixed Vertical "Floating" Navigation Bar
+# 5. Fixed Vertical "Floating Pill" Navbar
 # ==========================================
-st.sidebar.markdown("<br><h3 style='color: white; text-align: center; letter-spacing: 2px; font-size: 1.2rem;'>⚙️ MENU</h3><br>", unsafe_allow_html=True)
+st.sidebar.markdown("<br><h3 style='color: white; text-align: center; font-size: 1rem; color: #888;'>SYSTEM MENU</h3><br>", unsafe_allow_html=True)
 
 selected_tab = st.sidebar.radio(
     "Navigation",

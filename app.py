@@ -146,7 +146,7 @@ def inject_custom_css(is_outdoor_mode, img_b64):
         text_shadow = "none"
         bg_css = "background-color: #000000;"
     else:
-        # MASSIVELY INCREASED OPACITY HERE for better readability
+        # HIGH OPACITY for solid readability against backgrounds
         card_bg = "rgba(15, 15, 15, 0.85)"
         border = "1px solid rgba(255, 255, 255, 0.25)"
         blur = "blur(24px)"
@@ -162,63 +162,59 @@ def inject_custom_css(is_outdoor_mode, img_b64):
     <style>
         .stApp {{ {bg_css} }}
         
+        /* ADJUST MAIN CONTAINER PADDING TO MATCH MOCK UI */
+        .main .block-container {{
+            padding-top: 2rem !important;
+            padding-left: 1rem !important;
+            padding-right: 2rem !important;
+            max-width: 100% !important;
+        }}
+
         /* 1. HIDE THE NATIVE SLIDER ARROW */
         [data-testid="collapsedControl"] {{ display: none !important; }}
         
-        /* 2. CREATE THE HOVER-EXPAND NAV BAR */
+        /* 2. CREATE THE STATIC "FLOATING PILL" SIDEBAR (Matching Mock UI) */
         [data-testid="stSidebar"] {{
-            width: 80px !important;
-            min-width: 80px !important;
-            max-width: 80px !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            overflow-x: hidden !important;
-            background-color: rgba(10, 10, 10, 0.95) !important;
-            border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
-            z-index: 999999 !important;
+            width: 250px !important;
+            min-width: 250px !important;
+            max-width: 250px !important;
+            background-color: transparent !important;
+            border-right: none !important;
+            transition: none !important; /* REMOVED HOVER ANIMATION */
         }}
         
-        [data-testid="stSidebar"]:hover {{
-            width: 260px !important;
-            min-width: 260px !important;
-            max-width: 260px !important;
-        }}
-        
-        /* Center icons when collapsed */
         [data-testid="stSidebarUserContent"] {{
-            padding-left: 10px !important;
-            padding-right: 10px !important;
+            background-color: rgba(15, 15, 15, 0.85) !important;
+            backdrop-filter: blur(24px) !important;
+            -webkit-backdrop-filter: blur(24px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 24px !important;
+            margin: 20px 0px 20px 20px !important;
+            padding: 20px 15px !important;
+            height: calc(100vh - 40px) !important;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6) !important;
         }}
 
-        /* Format Radio Buttons as Navbar Items */
+        /* Format Radio Buttons as Minimal Vertical Tabs */
         div[role="radiogroup"] > label > div:first-child {{ display: none; }}
         
         div[role="radiogroup"] > label {{
             background: rgba(255,255,255,0.05);
-            padding: 15px 20px !important;
-            border-radius: 10px;
+            padding: 15px 15px !important;
+            border-radius: 12px;
             margin-bottom: 12px;
             border: 1px solid rgba(255,255,255,0.05);
             transition: 0.3s;
             cursor: pointer;
-            width: 220px !important; /* Forces width so text doesn't wrap when collapsed */
-            white-space: nowrap !important;
+            width: 100% !important;
             display: flex !important;
             align-items: center !important;
         }}
         div[role="radiogroup"] > label:hover {{ background: rgba(255,255,255,0.15); }}
-        div[role="radiogroup"] > label[data-checked="true"] {{ background: rgba(255,255,255,0.25); border-left: 4px solid #00FFAA; }}
-        div[role="radiogroup"] p {{ font-size: 1.1rem !important; font-weight: bold; color: white; margin: 0; padding-left: 5px; }}
+        div[role="radiogroup"] > label[data-checked="true"] {{ background: rgba(255,255,255,0.25); border-left: 4px solid #FFFFFF; }}
+        div[role="radiogroup"] p {{ font-size: 1.05rem !important; font-weight: bold; color: white; margin: 0; padding-left: 5px; }}
 
-        /* Sidebar Title Animation */
-        .sidebar-title {{
-            white-space: nowrap;
-            overflow: hidden;
-            color: white; 
-            text-align: center; 
-            letter-spacing: 2px;
-        }}
-
-        /* INCREASED OPACITY FOR GLASS CARDS & INPUTS */
+        /* Glass Cards */
         .glass-card, div[data-testid="stForm"], div[data-testid="stExpander"] {{
             background: {card_bg} !important;
             backdrop-filter: {blur} !important;
@@ -231,8 +227,9 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.7) !important;
         }}
 
+        /* Inputs */
         .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {{
-            background-color: rgba(10, 10, 10, 0.95) !important; /* Dark solid base for readable text */
+            background-color: rgba(10, 10, 10, 0.95) !important; /* Solid dark base */
             color: white !important;
             border: 1px solid rgba(255,255,255,0.4) !important;
             border-radius: 10px !important;
@@ -240,6 +237,7 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             font-size: 1.1rem !important;
         }}
 
+        /* Buttons */
         .stButton button {{
             background-color: rgba(10, 10, 10, 0.8) !important;
             border: 1px solid rgba(255, 255, 255, 0.4) !important;
@@ -251,13 +249,13 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             height: auto !important; 
         }}
         .stButton button:hover {{
-            background-color: rgba(0, 255, 170, 0.2) !important;
-            border-color: #00FFAA !important;
+            background-color: rgba(255, 255, 255, 0.15) !important;
+            border-color: #FFFFFF !important;
         }}
 
-        /* INCREASED OPACITY FOR CHAT BUBBLES */
+        /* Highly Opaque Chat Bubbles */
         .chat-user {{ 
-            background: rgba(40, 40, 40, 0.95); /* Nearly solid dark gray */
+            background: rgba(40, 40, 40, 0.95); 
             padding: 15px; 
             border-radius: 15px 15px 0 15px; 
             margin-bottom: 10px; 
@@ -266,11 +264,11 @@ def inject_custom_css(is_outdoor_mode, img_b64):
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }}
         .chat-coach {{ 
-            background: rgba(10, 10, 10, 0.95); /* Solid black base */
+            background: rgba(10, 10, 10, 0.95); 
             padding: 15px; 
             border-radius: 15px 15px 15px 0; 
             margin-bottom: 20px; 
-            border: 1px solid rgba(0,255,170,0.5); 
+            border: 1px solid rgba(255,255,255,0.2); 
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }}
     </style>
@@ -289,9 +287,9 @@ with col_toggle:
 inject_custom_css(st.session_state.outdoor_mode, img_base64)
 
 # ==========================================
-# 5. Fixed Vertical Hover-Navigation Bar
+# 5. Fixed Vertical "Floating" Navigation Bar
 # ==========================================
-st.sidebar.markdown("<br><h3 class='sidebar-title'>⚙️ MENU</h3><br>", unsafe_allow_html=True)
+st.sidebar.markdown("<br><h3 style='color: white; text-align: center; letter-spacing: 2px; font-size: 1.2rem;'>⚙️ MENU</h3><br>", unsafe_allow_html=True)
 
 selected_tab = st.sidebar.radio(
     "Navigation",
